@@ -1,0 +1,15 @@
+id: match3
+title: Match 3
+description: Swap neighbouring gems on an 8x8 board to line up three or more, build special gems and chain cascades to reach each level's score goal.
+license: MIT
+version: 0.1.0
+entry: index.html
+controls:
+  - "Mouse/touch: click two neighbouring gems or drag a gem"
+  - "Arrow keys + Space/Enter: move cursor, select, then arrow to swap"
+  - "H: hint"
+  - "1/2/3: use hammer/bomb/rainbow powerup (earned in endless mode)"
+  - "L: level overview"
+  - "Enter: next level"
+  - "P: pause"
+  - "R: retry level"

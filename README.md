@@ -19,6 +19,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 |----|-------|
 | [tetris](tetris/) | Tetris |
 | [snake](snake/) | Snake |
+| [match3](match3/) | Match 3 |
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.
@@ -28,7 +29,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 ## Installation mit kit
 Dieses Repo ist ein [`kit`](../kit)-Katalog. Jedes Spiel ist ein Paket (`type: files`, Zip), das nach `<data-dir>/media/games/<id>/` entpackt wird:
 
-    kit catalog add games https://github.com/TetrisIQ/blackout-games/releases/latest/download/catalog.tar.gz
+    kit catalog add games https://github.com/TetrisIQ/blackout-games
     kit install --select tetris,snake
 
 Danach `index.html` im Ordner `<data-dir>/media/games/<id>/` im Browser öffnen.
