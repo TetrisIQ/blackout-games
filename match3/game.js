@@ -10,7 +10,7 @@ const MAX_LEVEL = 200; // world 1 (classic) + world 2 (walls and cages)
 const BONUS_PER_MOVE = 50;
 const POWERUPS = ["hammer", "bomb", "rainbow"]; // earned in endless mode, usable everywhere
 const AWARD_CHANCE = 0.5; // per combo of 4+ gems in endless mode
-const POWERUP_WEIGHTS = { hammer: 60, bomb: 30, rainbow: 10 }; // which powerup an award is: common to rare
+const POWERUP_WEIGHTS = { hammer: 55, bomb: 30, rainbow: 15 }; // which powerup an award is: common to rare
 const TARGET_BASE = 1100;
 const TARGET_STEP = 18;
 const TARGET_CURVE = 0;
@@ -424,7 +424,7 @@ function awardPowerups(state, steps) {
   if (!state.endless) return got;
   for (const step of steps) {
     for (let k = 0; k < step.combos; k++) {
-      if (state.random() >= AWARD_CHANCE) continue;
+      if (state.random() >= (state.awardChance ?? AWARD_CHANCE)) continue; // awardChance: debug override
       const type = pickPowerup(state.random);
       state.powerups[type]++;
       got.push(type);
@@ -528,6 +528,7 @@ if (typeof document !== "undefined") {
   const ctx = canvas.getContext("2d");
   const cell = canvas.width / W;
   const el = (id) => document.getElementById(id);
+  let animSpeed = 1; // debug: 0 = instant
   const touchOnly = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const progressKey = `${GAME_ID}:progress`;
   const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22"];
@@ -575,10 +576,10 @@ if (typeof document !== "undefined") {
 
   function tween(ms, fn, ease = (t) => t) {
     return new Promise((resolve) => {
-      if (reduced) { fn(1); resolve(); return; }
+      if (reduced || animSpeed === 0) { fn(1); resolve(); return; }
       const t0 = performance.now();
       const tick = () => {
-        const t = Math.min(1, (performance.now() - t0) / ms);
+        const t = Math.min(1, ((performance.now() - t0) * animSpeed) / ms);
         fn(ease(t));
         if (t < 1) requestAnimationFrame(tick);
         else resolve();
@@ -875,7 +876,7 @@ if (typeof document !== "undefined") {
       const b = el(`pu-${p}`);
       b.textContent = `${LABELS[p]} x${state.powerups[p]} (${i + 1})`;
       b.disabled = !(state.powerups[p] > 0);
-      b.className = armed === p ? "armed" : "";
+      b.classList.toggle("armed", armed === p);
     });
   }
 
@@ -918,7 +919,9 @@ if (typeof document !== "undefined") {
     if (busy || paused || state.status !== "play") return;
     selected = null;
     hint = null;
+    if (dbg.freezeMoves && isFinite(state.movesLeft)) state.movesLeft = Math.max(state.movesLeft, 2);
     const res = trySwap(state, a, b);
+    if (dbg.freezeMoves && isFinite(state.movesLeft) && res.valid) state.movesLeft = Math.max(1, state.moves);
     busy = true;
     if (!res.valid) {
       say("No match - try another swap");
@@ -939,6 +942,7 @@ if (typeof document !== "undefined") {
     for (const type of res.awards) {
       popup(W / 2 - 0.5, H / 2 - 0.5, `${LABELS[type]} earned!`, 26);
       say(`Powerup earned: ${LABELS[type]}`);
+      flashPowerup(type);
     }
     if (res.bonus) {
       popup(W / 2 - 0.5, H / 2 - 0.5, `+${res.bonus} bonus`, 28);
@@ -947,6 +951,15 @@ if (typeof document !== "undefined") {
     targetScore = state.score;
     if (state.status !== "play" || state.endless || res.powerup || res.awards.length) recordResult();
     busy = false;
+  }
+
+  // Lets the powerup's button glow and pop for a moment (restarts if it is earned again).
+  function flashPowerup(type) {
+    const b = el(`pu-${type}`);
+    b.classList.remove("earned");
+    void b.offsetWidth; // restart the CSS animation
+    b.classList.add("earned");
+    setTimeout(() => b.classList.remove("earned"), 1500);
   }
 
   async function usePower(pos) {
@@ -997,6 +1010,7 @@ if (typeof document !== "undefined") {
 
   canvas.addEventListener("pointerdown", (e) => {
     const p = cellAt(e);
+    if (dbg.placing) { if (p && !busy) dbg.place(dbg.placing, p.x, p.y); return; }
     if (!p || busy || paused) return;
     cursor = p;
     if (armed) { usePower(p); return; }
@@ -1057,12 +1071,13 @@ if (typeof document !== "undefined") {
 
   // Tap the board when a level is over: continue / retry (no keyboard on phones).
   canvas.addEventListener("pointerdown", () => {
-    if (busy || panelOpen) return;
+    if (busy || panelOpen || dbg.placing) return;
     if (state.status === "levelclear") advance();
     else if (state.status === "over") retry();
   });
 
   document.addEventListener("keydown", (e) => {
+    if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; // typing in the debug window
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === "l") { togglePanel(); }
     else if (key === "Escape" && panelOpen) togglePanel(false);
@@ -1128,6 +1143,197 @@ if (typeof document !== "undefined") {
   el("btn-retry").addEventListener("click", () => { if (!busy && !panelOpen) retry(); });
   el("levels-btn").addEventListener("click", () => togglePanel());
   el("levels-close").addEventListener("click", () => togglePanel(false));
+
+  // --- Debug window: type debug_window() in the browser console (debug_window(false) closes it) ---
+  // The same actions are available from the console as `match3_debug` (e.g. match3_debug.goto(150)).
+  const idle = async () => { while (busy) await new Promise((r) => setTimeout(r, 40)); };
+  const persist = () => { try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* ignore */ } };
+  const forEachCell = (fn) => state.board.forEach((row, y) => row.forEach((c, x) => fn(c, x, y)));
+
+  const dbg = {
+    freezeMoves: false, // moves never run out
+    placing: null, // tool applied to the clicked cell instead of playing
+    get state() { return state; },
+    progress,
+    findMove, levelConfig, usePowerup, trySwap,
+
+    async goto(n) {
+      await idle();
+      startLevel(state, Math.min(MAX_LEVEL, Math.max(1, Math.round(Number(n)) || 1)));
+      paused = false;
+      togglePanel(false);
+      newBoard();
+    },
+    async endless() { await idle(); startEndless(state); paused = false; togglePanel(false); newBoard(); },
+    async retry() { await idle(); retry(); },
+    async win() {
+      await idle();
+      if (state.status !== "play") return;
+      forEachCell((c) => { if (c && c.c > 0) c.c = 0; });
+      setBoard(state.board);
+      if (state.endless) return;
+      state.score = Math.max(state.score, state.target);
+      state.status = "levelclear";
+      state.stars = starsFor(Math.max(state.movesLeft, 0), state.moves);
+      targetScore = state.score;
+      recordResult();
+    },
+    async lose() {
+      await idle();
+      if (state.endless || state.status !== "play") return;
+      state.movesLeft = 0;
+      state.status = "over";
+      recordResult();
+    },
+    addMoves(n) {
+      if (!isFinite(state.movesLeft)) return;
+      state.movesLeft = Math.max(0, state.movesLeft + n);
+      if (state.status === "over" && state.movesLeft > 0) state.status = "play";
+    },
+    addScore(n) { state.score = Math.max(0, state.score + n); targetScore = state.score; },
+    setPowerup(type, n) {
+      state.powerups[type] = Math.max(0, Math.floor(n));
+      if (n > 0) flashPowerup(type);
+      progress.powerups = { ...state.powerups };
+      persist();
+    },
+    setAwardChance(percent) { state.awardChance = Math.min(1, Math.max(0, percent / 100)); },
+    async shuffle() { await idle(); busy = true; shuffle(state); setBoard(state.board); busy = false; },
+    breakCages() { forEachCell((c) => { if (c && c.c > 0) c.c = 0; }); setBoard(state.board); },
+    // Plays out any matches left on the board (after placing gems by hand).
+    async resolve() {
+      await idle();
+      busy = true;
+      setBoard(state.board);
+      const steps = resolve(state, null, []);
+      const shuffled = ensurePlayable(state);
+      await finishMove({ steps, shuffled, bonus: 0, awards: awardPowerups(state, steps), powerup: true });
+    },
+    place(tool, x, y) {
+      if (!inBoard(x, y)) return;
+      const cur = state.board[y][x];
+      const keepType = cur && cur.t >= 0 ? cur.t : 0;
+      if (/^t\d$/.test(tool)) state.board[y][x] = gem(Number(tool[1]));
+      else if (tool === "row" || tool === "col" || tool === "blast") state.board[y][x] = gem(keepType, tool);
+      else if (tool === "color") state.board[y][x] = gem(COLOR, "color");
+      else if (tool === "cage1" || tool === "cage2") state.board[y][x] = gem(keepType, null, tool === "cage1" ? 1 : 2);
+      else if (tool === "uncage") state.board[y][x] = gem(keepType, cur && cur.s !== "rock" ? cur.s : null);
+      else if (tool === "rock") state.board[y][x] = gem(ROCK, "rock");
+      else if (tool === "random") state.board[y][x] = gem(Math.floor(Math.random() * state.types));
+      setBoard(state.board);
+    },
+    unlockAll() { progress.unlocked = MAX_LEVEL; persist(); buildGrid(); },
+    resetProgress() {
+      Object.assign(progress, { unlocked: 1, endlessBest: 0, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} });
+      for (const p of POWERUPS) state.powerups[p] = 0;
+      persist();
+      buildGrid();
+    },
+    speed(x) { animSpeed = x; },
+    theme(t) {
+      if (t === "auto") { root.removeAttribute("data-theme"); lastAuto = null; autoTheme(); } else root.setAttribute("data-theme", t);
+      readPalette();
+    },
+    info() {
+      let moves = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) for (const [dx, dy] of [[1, 0], [0, 1]]) if (inBoard(x + dx, y + dy) && isValidSwap(state.board, { x, y }, { x: x + dx, y: y + dy })) moves++;
+      let rocks = 0;
+      forEachCell((c) => { if (isRock(c)) rocks++; });
+      return [
+        `level ${state.endless ? "endless" : state.level}  status ${state.status}${busy ? "  (busy)" : ""}`,
+        `moves ${state.movesLeft}/${state.moves}  score ${state.score}/${state.target}  stars ${state.stars}`,
+        `cages ${cagesLeft(state.board)}  rocks ${rocks}  valid moves ${moves}`,
+        `powerups ${POWERUPS.map((p) => `${p[0].toUpperCase()}${state.powerups[p]}`).join(" ")}  award chance ${Math.round((state.awardChance ?? AWARD_CHANCE) * 100)}%`,
+        `unlocked ${progress.unlocked}  stars ${Object.keys(progress.stars).length}  anim x${animSpeed}`,
+        `theme ${root.getAttribute("data-theme")}  armed ${armed || "-"}  placing ${dbg.placing || "-"}`,
+      ].join("\n");
+    },
+  };
+  window.match3_debug = dbg;
+
+  let debugPanel = null;
+  let debugTimer = null;
+
+  function buildDebugPanel() {
+    const style = document.createElement("style");
+    style.textContent = `
+      #debug { position: fixed; right: 6px; bottom: 6px; z-index: 50; width: 300px; max-width: 96vw; max-height: 86vh; overflow: auto;
+        background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; font: 12px/1.4 monospace; text-align: left;
+        -webkit-user-select: text; user-select: text; }
+      #debug h4 { margin: 8px 0 3px; font: bold 11px monospace; color: var(--accent); text-transform: uppercase; }
+      #debug .row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+      #debug button, #debug select, #debug input { font: 11px monospace; min-height: 0; min-width: 0; padding: 2px 6px; }
+      #debug input[type=number] { width: 56px; color: var(--text); background: var(--surface); border: 1px solid var(--border); }
+      #debug pre { margin: 0; white-space: pre-wrap; background: var(--surface); padding: 4px; border-radius: 4px; }
+      #debug .head { display: flex; justify-content: space-between; align-items: center; }`;
+    document.head.appendChild(style);
+    const panel = document.createElement("div");
+    panel.id = "debug";
+    const row = (...kids) => { const r = document.createElement("div"); r.className = "row"; kids.forEach((k) => r.appendChild(k)); return r; };
+    const title = (t) => { const h = document.createElement("h4"); h.textContent = t; return h; };
+    const btn = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", fn); return b; };
+    const num = (value, min, max) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.value = value; return i; };
+    const select = (options, fn) => {
+      const s = document.createElement("select");
+      for (const [value, label] of options) { const o = document.createElement("option"); o.value = value; o.textContent = label; s.appendChild(o); }
+      s.addEventListener("change", () => fn(s.value));
+      return s;
+    };
+    const head = document.createElement("div");
+    head.className = "head";
+    const t = document.createElement("b");
+    t.textContent = "match3 debug";
+    head.append(t, btn("x", () => window.debug_window(false)));
+    const out = document.createElement("pre");
+    out.id = "debug-info";
+    const levelInput = num(state.level || 1, 1, MAX_LEVEL);
+    const chance = num(50, 0, 100);
+    const scoreInput = num(500, 0, 99999);
+    const freeze = document.createElement("input");
+    freeze.type = "checkbox";
+    freeze.addEventListener("change", () => { dbg.freezeMoves = freeze.checked; });
+    const freezeLabel = document.createElement("label");
+    freezeLabel.append(freeze, " infinite moves");
+    const tools = [["", "off (play)"], ...[0, 1, 2, 3, 4, 5].map((n) => [`t${n}`, `gem ${n}`]),
+      ["row", "special: row"], ["col", "special: column"], ["blast", "special: blast"], ["color", "special: colour"],
+      ["cage1", "cage (1 hit)"], ["cage2", "cage (2 hits)"], ["uncage", "remove cage"], ["rock", "rock"], ["random", "random gem"]];
+    panel.append(
+      head, out,
+      title("Level"),
+      row(levelInput, btn("Go", () => dbg.goto(levelInput.value)), btn("Prev", () => dbg.goto((state.level || 1) - 1)), btn("Next", () => dbg.goto((state.level || 0) + 1)), btn("Endless", () => dbg.endless())),
+      row(btn("Win", () => dbg.win()), btn("Lose", () => dbg.lose()), btn("Retry", () => dbg.retry()), btn("Unlock all", () => dbg.unlockAll()), btn("Reset progress", () => { if (confirm("Reset all saved progress?")) dbg.resetProgress(); })),
+      title("Moves and score"),
+      row(btn("+5 moves", () => dbg.addMoves(5)), btn("-1 move", () => dbg.addMoves(-1)), freezeLabel),
+      row(scoreInput, btn("+ score", () => dbg.addScore(Number(scoreInput.value) || 0)), btn("- score", () => dbg.addScore(-(Number(scoreInput.value) || 0)))),
+      title("Powerups"),
+      ...POWERUPS.map((p) => row(btn(`${p} +1`, () => dbg.setPowerup(p, state.powerups[p] + 1)), btn("+5", () => dbg.setPowerup(p, state.powerups[p] + 5)), btn("0", () => dbg.setPowerup(p, 0)))),
+      row(document.createTextNode("award chance %"), chance, btn("Set", () => dbg.setAwardChance(Number(chance.value) || 0))),
+      title("Board"),
+      row(btn("Shuffle", () => dbg.shuffle()), btn("Break cages", () => dbg.breakCages()), btn("Hint", showHint), btn("Resolve", () => dbg.resolve())),
+      row(document.createTextNode("click-to-place"), select(tools, (v) => { dbg.placing = v || null; })),
+      title("View"),
+      row(document.createTextNode("anim"), select([["1", "x1"], ["0", "instant"], ["0.5", "x0.5 slow"], ["2", "x2"], ["4", "x4"]], (v) => dbg.speed(Number(v))), btn("Light", () => dbg.theme("light")), btn("Dark", () => dbg.theme("dark")), btn("Auto", () => dbg.theme("auto"))),
+      row(btn("Log state", () => console.log(state)), btn("Log progress", () => console.log(progress))),
+    );
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  window.debug_window = function debug_window(open = true) {
+    if (open === false) {
+      if (debugPanel) { debugPanel.remove(); debugPanel = null; }
+      clearInterval(debugTimer);
+      dbg.placing = null;
+      return "debug window closed";
+    }
+    if (!debugPanel) {
+      debugPanel = buildDebugPanel();
+      const refresh = () => { const o = debugPanel && debugPanel.querySelector("#debug-info"); if (o) o.textContent = dbg.info(); };
+      refresh();
+      debugTimer = setInterval(refresh, 300);
+    }
+    return "debug window open - debug_window(false) closes it; actions: match3_debug";
+  };
 
   buildGrid();
   say(goalText());

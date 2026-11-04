@@ -220,3 +220,29 @@ progress {
     min-height: 48px;
   }
 }
+
+/* A powerup was just earned: glow and pop. */
+#powerups button.earned {
+  animation: earned 1.5s ease-out;
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+@keyframes earned {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 var(--accent); background: var(--accent); }
+  20% { transform: scale(1.25); box-shadow: 0 0 18px 6px var(--accent); background: var(--accent); }
+  45% { transform: scale(0.95); box-shadow: 0 0 10px 3px var(--accent); }
+  65% { transform: scale(1.12); box-shadow: 0 0 14px 4px var(--accent); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #powerups button.earned {
+    animation: earned-calm 1.5s ease-out;
+  }
+
+  @keyframes earned-calm {
+    0%, 60% { background: var(--accent); }
+    100% { background: var(--surface); }
+  }
+}

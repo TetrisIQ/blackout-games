@@ -24,7 +24,7 @@ Tausche benachbarte Steine auf einem 8×8 Feld, bilde Reihen aus mindestens drei
   - **Käfige** sperren einen Stein: Ein eingesperrter Stein lässt sich nicht tauschen und fällt nicht. Ein Käfig bekommt einen Treffer, wenn der Stein selbst oder ein Nachbarfeld (oben, unten, links, rechts) in einem Schritt gelöscht wird (Reihe, Spezialstein, Powerup). Graue Käfige halten einen Treffer aus, goldene zwei (je Schritt höchstens ein Treffer). Ist der Käfig weg, ist der Stein ein normaler Stein.
   - Ein Level ist geschafft, wenn das Punkteziel erreicht **und** alle Käfige zerstört sind. Die Anzahl der Käfige (2 bis 20) und Felsen (4 bis 20) wächst über die Level; Level 101–105 haben nur Felsen. Die Layouts sind fest, aber nicht handgezeichnet: 12 Felsmuster, ab Level 151 zwei kombiniert, Käfige per festem Zufall (jeder Käfig bleibt erreichbar). Mehr Käfige geben mehr Züge.
 - **Endlos-Modus** (Button in der Level-Übersicht): kein Ziel, kein Zuglimit, die Punkte zählen einfach weiter. Der Bestwert wird laufend gespeichert; R startet neu.
-- **Powerups** gewinnst du im Endlos-Modus: Löst du eine Kombi aus mehr als 3 Steinen auf (4er-Reihe, L-/T-Form oder größer), gibt es mit 50 % Wahrscheinlichkeit ein Powerup (Hammer 60 %, Bombe 30 %, Regenbogen 10 %) (pro Kombi, auch in Kaskaden). Genutzt werden können sie in jedem Modus, also auch in den normalen Leveln. Sie kosten keinen Zug, und der Vorrat bleibt gespeichert.
+- **Powerups** gewinnst du im Endlos-Modus: Löst du eine Kombi aus mehr als 3 Steinen auf (4er-Reihe, L-/T-Form oder größer), gibt es mit 50 % Wahrscheinlichkeit ein Powerup (Hammer 55 %, Bombe 30 %, Regenbogen 15 %) (pro Kombi, auch in Kaskaden). Genutzt werden können sie in jedem Modus, also auch in den normalen Leveln. Der passende Button leuchtet und poppt kurz auf, wenn du eines bekommst. Sie kosten keinen Zug, und der Vorrat bleibt gespeichert.
   - **Hammer:** löscht einen Stein.
   - **Bombe:** löscht das 3×3 Feld um einen Stein.
   - **Regenbogen:** löscht alle Steine der Farbe des gewählten Steins.
@@ -37,6 +37,16 @@ Tauschen (ungültige Züge federn zurück), Auflösen mit Partikeln und Punkte-P
 
 ## Darstellung
 Folgt dem hellen/dunklen Theme von kit (`data-theme`, `kit-theme`, sonst Systemeinstellung). Für Handys: Das Feld skaliert, Hinweis/Neustart/Level-Buttons und Powerup-Buttons sind groß genug, Tippen auf das Feld setzt nach einem Level fort, die Level-Übersicht hat 5 Spalten auf schmalen Displays.
+
+## Debug-Fenster
+In der Browser-Konsole `debug_window()` eingeben (`debug_window(false)` schließt es). Das Fenster zeigt live den Zustand (Level, Züge, Punkte, Käfige, gültige Züge, Powerups) und bietet:
+- **Level:** Level direkt starten (auch gesperrte), Vor/Zurück, Endlos, Gewinnen, Verlieren, Neu starten, alle freischalten, Fortschritt zurücksetzen.
+- **Züge/Punkte:** Züge ± , unendliche Züge, Punkte ±.
+- **Powerups:** je Typ +1, +5 oder auf 0; die Vergabe-Wahrscheinlichkeit für Kombis einstellen (z. B. 100 %).
+- **Feld:** mischen, alle Käfige brechen, Hinweis, Feld auflösen; „click-to-place“ setzt per Klick Steine, Spezialsteine (Zeile, Spalte, Bombe, Farbstein), Käfige, Felsen oder zufällige Steine.
+- **Ansicht:** Animationsgeschwindigkeit (auch sofort), Theme hell/dunkel/auto, Zustand in die Konsole loggen.
+
+Dieselben Aktionen gibt es in der Konsole als `match3_debug` (z. B. `match3_debug.goto(150)`, `match3_debug.setPowerup("bomb", 9)`, `match3_debug.state`).
 
 ## Tests
     node --test match3/test/*.test.js

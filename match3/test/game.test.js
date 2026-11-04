@@ -578,3 +578,15 @@ test("invariant: random play on world 2 levels keeps boards full, stable and pla
     }
   }
 });
+
+test("debug: awardChance overrides the combo award chance", () => {
+  for (const [chance, expectAward] of [[1, true], [0, false]]) {
+    for (let seed = 1; seed <= 30; seed++) {
+      const state = endlessWith(set(base(), [[0, 3, 5], [1, 3, 5], [3, 3, 5], [2, 4, 5]]), {});
+      state.random = mulberry32(seed);
+      state.awardChance = chance;
+      const res = g.trySwap(state, { x: 2, y: 3 }, { x: 2, y: 4 });
+      assert.equal(res.awards.length >= 1, expectAward);
+    }
+  }
+});
