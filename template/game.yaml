@@ -1,0 +1,10 @@
+id: template
+title: Template
+description: Minimal game skeleton with game loop, pause and highscore. Copy it for a new game.
+license: MIT
+version: 0.1.0
+entry: index.html
+controls:
+  - "Arrow keys / WASD: move"
+  - "P: pause"
+  - "R: restart"
