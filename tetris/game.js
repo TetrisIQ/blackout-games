@@ -169,6 +169,31 @@ if (typeof module !== "undefined") {
 // --- Browser: input, rendering, loop ------------------------------------
 
 if (typeof document !== "undefined") {
+  // --- Theme: follow the kit portal (data-theme on the page), else the saved kit choice, else the system ---
+  const PAL = {};
+  const root = document.documentElement;
+  const systemDark = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function readPalette() {
+    const cs = getComputedStyle(root);
+    for (const k of ["board", "line", "text", "muted", "accent", "overlay", "cell-a", "cell-b", "cage", "bg"]) PAL[k] = cs.getPropertyValue(`--${k}`).trim();
+  }
+
+  let lastAuto = root.hasAttribute("data-theme-auto") ? root.getAttribute("data-theme") : null; // set by the page's head script
+  function autoTheme() {
+    const now = root.getAttribute("data-theme");
+    if (now && now !== lastAuto) return; // the portal's choice wins
+    let saved = null;
+    try { saved = localStorage.getItem("kit-theme"); } catch (e) { /* storage blocked */ }
+    lastAuto = saved || (systemDark && systemDark.matches ? "dark" : "light");
+    root.setAttribute("data-theme", lastAuto);
+  }
+
+  autoTheme();
+  readPalette();
+  if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
+  if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
   const CELL = 30;
   const COLORS = {
     I: "#00bcd4", O: "#f1c40f", T: "#9b59b6", S: "#2ecc71",
@@ -204,20 +229,26 @@ if (typeof document !== "undefined") {
   }
 
   function overlay(text) {
-    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillStyle = PAL.overlay;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.font = "28px system-ui";
+    ctx.fillStyle = PAL.text;
+    ctx.font = "28px Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   }
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = PAL.line;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < 10; x++) { ctx.moveTo(x * CELL + 0.5, 0); ctx.lineTo(x * CELL + 0.5, canvas.height); }
+    for (let y = 1; y < 20; y++) { ctx.moveTo(0, y * CELL + 0.5); ctx.lineTo(canvas.width, y * CELL + 0.5); }
+    ctx.stroke();
     state.board.forEach((row, y) => row.forEach((t, x) => t && cell(ctx, t, x, y)));
     if (!state.over) {
       const p = state.piece;
-      shapeCells(ctx, p.shape, p.type, p.x, ghostY(state), 0.25);
+      shapeCells(ctx, p.shape, p.type, p.x, ghostY(state), 0.3);
       shapeCells(ctx, p.shape, p.type, p.x, p.y, 1);
     }
     nextCtx.clearRect(0, 0, 120, 120);
@@ -227,8 +258,8 @@ if (typeof document !== "undefined") {
     els.score.textContent = state.score;
     els.lines.textContent = state.lines;
     els.level.textContent = state.level;
-    if (state.over) overlay("Game over (R)");
-    else if (paused) overlay("Paused");
+    if (state.over) overlay("Game over (R / tap)");
+    else if (paused) overlay("Paused (P / tap)");
   }
 
   function saveBest() {
@@ -246,22 +277,62 @@ if (typeof document !== "undefined") {
     acc = 0;
   }
 
+  function togglePause() {
+    if (!state.over) paused = !paused;
+  }
+
+  const actions = {
+    left: () => move(state, -1),
+    right: () => move(state, 1),
+    rotate: () => rotate(state),
+    down: () => softDrop(state),
+    drop: () => hardDrop(state),
+  };
+
   document.addEventListener("keydown", (e) => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === "r") restart();
     else if (key === "p" && !state.over) paused = !paused;
     else if (!paused && !state.over) {
-      if (key === "ArrowLeft" || key === "a") move(state, -1);
-      else if (key === "ArrowRight" || key === "d") move(state, 1);
-      else if (key === "ArrowUp" || key === "w" || key === "x") rotate(state);
-      else if (key === "ArrowDown" || key === "s") softDrop(state);
-      else if (key === " ") hardDrop(state);
+      if (key === "ArrowLeft" || key === "a") actions.left();
+      else if (key === "ArrowRight" || key === "d") actions.right();
+      else if (key === "ArrowUp" || key === "w" || key === "x") actions.rotate();
+      else if (key === "ArrowDown" || key === "s") actions.down();
+      else if (key === " ") actions.drop();
       else return;
     } else return;
     e.preventDefault();
     saveBest();
     draw();
   });
+
+  // Touch: on-screen buttons (move and soft drop repeat while held), tap the board to resume / restart.
+  let hold = null;
+  function stopHold() {
+    if (hold) { clearTimeout(hold.first); clearInterval(hold.timer); hold = null; }
+  }
+  for (const b of document.querySelectorAll("[data-act]")) {
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (paused || state.over) return;
+      const act = actions[b.dataset.act];
+      act();
+      saveBest();
+      stopHold();
+      if (b.hasAttribute("data-repeat")) {
+        hold = { first: setTimeout(() => { hold.timer = setInterval(() => { if (!paused && !state.over) act(); }, 70); }, 220) };
+      }
+    });
+  }
+  window.addEventListener("pointerup", stopHold);
+  window.addEventListener("pointercancel", stopHold);
+  canvas.addEventListener("pointerdown", () => {
+    if (state.over) restart();
+    else if (paused) paused = false;
+  });
+  document.getElementById("btn-pause").addEventListener("click", togglePause);
+  document.getElementById("btn-restart").addEventListener("click", restart);
+  document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over) { paused = true; stopHold(); } });
 
   function frame(now) {
     acc += now - last;

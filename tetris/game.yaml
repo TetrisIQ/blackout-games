@@ -11,3 +11,4 @@ controls:
   - "Space: hard drop"
   - "P: pause"
   - "R: restart"
+  - "Touch: on-screen buttons"

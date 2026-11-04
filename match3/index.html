@@ -2,33 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Match 3</title>
+  <script>!function(){var r=document.documentElement;if(r.getAttribute("data-theme"))return;var s=null;try{s=localStorage.getItem("kit-theme")}catch(e){}if(!s&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)s="dark";r.setAttribute("data-theme",s||"light");r.setAttribute("data-theme-auto","")}()</script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main>
     <h1>Match 3</h1>
-    <p>Level <span id="level">1</span> · Moves <span id="moves">25</span> · Score <span id="score">0</span>/<span id="target">0</span><span id="cages-wrap" hidden> · Cages <span id="cages">0</span></span> · Best <span id="best">0</span> · <button id="levels-btn" type="button">Levels (L)</button></p>
+    <p class="hud">
+      <span>Level <b id="level">1</b></span>
+      <span>Moves <b id="moves">25</b></span>
+      <span>Score <b id="score">0</b>/<span id="target">0</span></span>
+      <span id="cages-wrap" hidden>Cages <b id="cages">0</b></span>
+      <span>Best <b id="best">0</b></span>
+    </p>
     <div id="board">
       <canvas id="game" width="448" height="448"></canvas>
       <progress id="goal" max="1" value="0"></progress>
-      <p id="powerups" hidden>
+      <p id="powerups" class="tools" hidden>
         <button id="pu-hammer" type="button">Hammer</button>
         <button id="pu-bomb" type="button">Bomb</button>
         <button id="pu-rainbow" type="button">Rainbow</button>
       </p>
+      <p class="tools">
+        <button id="btn-hint" type="button">Hint</button>
+        <button id="btn-retry" type="button">Retry</button>
+        <button id="levels-btn" type="button">Levels</button>
+      </p>
       <p id="msg" class="hint">&nbsp;</p>
-      <p class="hint">Click/drag to swap · arrows + Space · H hint · L levels · P pause · R retry</p>
+      <p class="hint kbd-hint">Click/drag to swap · arrows + Space · 1/2/3 powerups · H hint · L levels · R retry</p>
+      <p class="hint touch-only">Drag a gem or tap two neighbours · tap the board to continue</p>
     </div>
     <section id="levels" hidden>
       <h2>Levels</h2>
-      <p><button id="endless" type="button">∞ Endless</button></p>
+      <p><button id="endless" type="button">&infin; Endless</button></p>
       <h3>World 1 - Classic</h3>
       <div id="grid"></div>
       <h3>World 2 - Walls &amp; Cages</h3>
       <div id="grid2"></div>
-      <p class="hint">Progress is saved in this browser. <button id="levels-close" type="button">Back to game (Esc)</button></p>
+      <p class="hint">Progress is saved in this browser.</p>
+      <p><button id="levels-close" type="button">Back to game (Esc)</button></p>
     </section>
   </main>
   <script src="game.js"></script>

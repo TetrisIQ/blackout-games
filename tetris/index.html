@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Tetris</title>
+  <script>!function(){var r=document.documentElement;if(r.getAttribute("data-theme"))return;var s=null;try{s=localStorage.getItem("kit-theme")}catch(e){}if(!s&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)s="dark";r.setAttribute("data-theme",s||"light");r.setAttribute("data-theme-auto","")}()</script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,9 +19,20 @@
         <p>Lines<br><strong id="lines">0</strong></p>
         <p>Level<br><strong id="level">1</strong></p>
         <p>Best<br><strong id="best">0</strong></p>
+        <div class="bar touch-only">
+          <button id="btn-pause" type="button">Pause</button>
+          <button id="btn-restart" type="button">Restart</button>
+        </div>
       </aside>
     </div>
-    <p class="hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart</p>
+    <div class="pad touch-only" aria-label="Controls">
+      <button data-act="left" data-repeat type="button" aria-label="Left">&larr;</button>
+      <button data-act="rotate" type="button" aria-label="Rotate">&#x27F3;</button>
+      <button data-act="right" data-repeat type="button" aria-label="Right">&rarr;</button>
+      <button data-act="down" data-repeat type="button" aria-label="Soft drop">&darr;</button>
+      <button data-act="drop" type="button" aria-label="Hard drop">&#x2913;</button>
+    </div>
+    <p class="hint kbd-hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart</p>
   </main>
   <script src="game.js"></script>
 </body>

@@ -35,5 +35,8 @@ Tausche benachbarte Steine auf einem 8×8 Feld, bilde Reihen aus mindestens drei
 ## Animationen
 Tauschen (ungültige Züge federn zurück), Auflösen mit Partikeln und Punkte-Popups, Nachfallen und Nachrutschen, Kaskaden-Hinweis, Bildschirmwackeln bei großen Räumungen, Mischen und Level-Start. Bei `prefers-reduced-motion` werden die Animationen übersprungen.
 
+## Darstellung
+Folgt dem hellen/dunklen Theme von kit (`data-theme`, `kit-theme`, sonst Systemeinstellung). Für Handys: Das Feld skaliert, Hinweis/Neustart/Level-Buttons und Powerup-Buttons sind groß genug, Tippen auf das Feld setzt nach einem Level fort, die Level-Übersicht hat 5 Spalten auf schmalen Displays.
+
 ## Tests
     node --test match3/test/*.test.js

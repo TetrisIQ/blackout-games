@@ -83,6 +83,31 @@ if (typeof module !== "undefined") {
 // --- Browser: input, rendering, loop ------------------------------------
 
 if (typeof document !== "undefined") {
+  // --- Theme: follow the kit portal (data-theme on the page), else the saved kit choice, else the system ---
+  const PAL = {};
+  const root = document.documentElement;
+  const systemDark = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function readPalette() {
+    const cs = getComputedStyle(root);
+    for (const k of ["board", "line", "text", "muted", "accent", "overlay", "cell-a", "cell-b", "cage", "bg"]) PAL[k] = cs.getPropertyValue(`--${k}`).trim();
+  }
+
+  let lastAuto = root.hasAttribute("data-theme-auto") ? root.getAttribute("data-theme") : null; // set by the page's head script
+  function autoTheme() {
+    const now = root.getAttribute("data-theme");
+    if (now && now !== lastAuto) return; // the portal's choice wins
+    let saved = null;
+    try { saved = localStorage.getItem("kit-theme"); } catch (e) { /* storage blocked */ }
+    lastAuto = saved || (systemDark && systemDark.matches ? "dark" : "light");
+    root.setAttribute("data-theme", lastAuto);
+  }
+
+  autoTheme();
+  readPalette();
+  if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
+  if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const cell = canvas.width / SIZE;
@@ -105,10 +130,10 @@ if (typeof document !== "undefined") {
   };
 
   function overlay(text) {
-    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillStyle = PAL.overlay;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.font = "28px system-ui";
+    ctx.fillStyle = PAL.text;
+    ctx.font = "28px Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   }
@@ -120,13 +145,13 @@ if (typeof document !== "undefined") {
       ctx.fillRect(state.food.x * cell + 2, state.food.y * cell + 2, cell - 4, cell - 4);
     }
     state.snake.forEach((s, i) => {
-      ctx.fillStyle = i === 0 ? "#27ae60" : "#2ecc71";
+      ctx.fillStyle = i === 0 ? "#1e8e4e" : "#2ecc71";
       ctx.fillRect(s.x * cell + 1, s.y * cell + 1, cell - 2, cell - 2);
     });
     scoreEl.textContent = state.score;
-    if (state.won) overlay("You win! (R)");
-    else if (state.over) overlay("Game over (R)");
-    else if (paused) overlay("Paused");
+    if (state.won) overlay("You win! (R / tap)");
+    else if (state.over) overlay("Game over (R / tap)");
+    else if (paused) overlay("Paused (P / tap)");
   }
 
   function saveBest() {
@@ -144,15 +169,46 @@ if (typeof document !== "undefined") {
     acc = 0;
   }
 
+  function togglePause() {
+    if (!state.over) paused = !paused;
+  }
+
   document.addEventListener("keydown", (e) => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === "r") restart();
-    else if (key === "p" && !state.over) paused = !paused;
+    else if (key === "p") togglePause();
     else if (keys[key] && !paused && !state.over) setDir(state, keys[key]);
     else return;
     e.preventDefault();
     draw();
   });
+
+  // Touch: swipe on the board, d-pad and buttons below it, tap to continue / restart.
+  let swipe = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (state.over) { restart(); draw(); return; }
+    if (paused) { paused = false; return; }
+    swipe = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!swipe || paused || state.over) return;
+    const dx = e.clientX - swipe.x;
+    const dy = e.clientY - swipe.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    setDir(state, Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? DIRS.right : DIRS.left) : (dy > 0 ? DIRS.down : DIRS.up));
+    swipe = { x: e.clientX, y: e.clientY }; // a long drag can steer again
+  });
+  window.addEventListener("pointerup", () => { swipe = null; });
+  window.addEventListener("pointercancel", () => { swipe = null; });
+  for (const b of document.querySelectorAll("[data-dir]")) {
+    b.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (!paused && !state.over) setDir(state, DIRS[b.dataset.dir]);
+    });
+  }
+  document.getElementById("btn-pause").addEventListener("click", togglePause);
+  document.getElementById("btn-restart").addEventListener("click", () => { restart(); draw(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over) paused = true; });
 
   function frame(now) {
     acc += now - last;

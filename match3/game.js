@@ -499,10 +499,36 @@ if (typeof module !== "undefined") {
 // Gems are sprites ({ g, x, y, sc, al, flash }, positions in cell units) that tweens move around.
 
 if (typeof document !== "undefined") {
+  // --- Theme: follow the kit portal (data-theme on the page), else the saved kit choice, else the system ---
+  const PAL = {};
+  const root = document.documentElement;
+  const systemDark = window.matchMedia ? matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function readPalette() {
+    const cs = getComputedStyle(root);
+    for (const k of ["board", "line", "text", "muted", "accent", "overlay", "cell-a", "cell-b", "cage", "bg"]) PAL[k] = cs.getPropertyValue(`--${k}`).trim();
+  }
+
+  let lastAuto = root.hasAttribute("data-theme-auto") ? root.getAttribute("data-theme") : null; // set by the page's head script
+  function autoTheme() {
+    const now = root.getAttribute("data-theme");
+    if (now && now !== lastAuto) return; // the portal's choice wins
+    let saved = null;
+    try { saved = localStorage.getItem("kit-theme"); } catch (e) { /* storage blocked */ }
+    lastAuto = saved || (systemDark && systemDark.matches ? "dark" : "light");
+    root.setAttribute("data-theme", lastAuto);
+  }
+
+  autoTheme();
+  readPalette();
+  if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
+  if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const cell = canvas.width / W;
   const el = (id) => document.getElementById(id);
+  const touchOnly = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const progressKey = `${GAME_ID}:progress`;
   const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22"];
   const reduced = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -756,7 +782,7 @@ if (typeof document !== "undefined") {
       // cage: bars over the gem; gold and double when it takes two hits
       const h = cell * 0.43;
       ctx.globalAlpha = s.al;
-      ctx.strokeStyle = s.g.c > 1 ? "#ffca28" : "#cfd8dc";
+      ctx.strokeStyle = s.g.c > 1 ? "#e0a800" : PAL.cage;
       ctx.lineWidth = s.g.c > 1 ? 4 : 3;
       ctx.strokeRect(-h, -h, h * 2, h * 2);
       ctx.lineWidth = 2;
@@ -775,10 +801,10 @@ if (typeof document !== "undefined") {
   }
 
   function overlay(text) {
-    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillStyle = PAL.overlay;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.font = "28px system-ui";
+    ctx.fillStyle = PAL.text;
+    ctx.font = "28px Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   }
@@ -789,7 +815,7 @@ if (typeof document !== "undefined") {
     if (shake > 0.2) ctx.translate((Math.random() - 0.5) * shake * 2, (Math.random() - 0.5) * shake * 2);
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        ctx.fillStyle = (x + y) % 2 ? "#161616" : "#1d1d1d";
+        ctx.fillStyle = (x + y) % 2 ? PAL["cell-b"] : PAL["cell-a"];
         ctx.fillRect(x * cell, y * cell, cell, cell);
       }
     }
@@ -803,17 +829,17 @@ if (typeof document !== "undefined") {
     for (const p of popups) {
       const t = p.life / p.max;
       ctx.globalAlpha = 1 - t * t;
-      ctx.font = `bold ${p.size}px system-ui`;
+      ctx.font = `bold ${p.size}px Georgia, serif`;
       ctx.textAlign = "center";
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "#000";
+      ctx.strokeStyle = PAL.bg;
       ctx.strokeText(p.text, p.x, p.y - t * 40);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = PAL.text;
       ctx.fillText(p.text, p.x, p.y - t * 40);
     }
     ctx.globalAlpha = 1;
     if (hint) { outline(hint[0], "#2ecc71", 3); outline(hint[1], "#2ecc71", 3); }
-    if (selected) outline(selected, "#fff", 4);
+    if (selected) outline(selected, PAL.text, 4);
     if (armed && !busy) {
       for (const p of previewCells()) {
         ctx.fillStyle = "rgba(255,140,0,0.25)";
@@ -821,11 +847,11 @@ if (typeof document !== "undefined") {
         outline(p, "#ff8c00", 2);
       }
     }
-    outline(cursor, "rgba(255,255,255,0.35)", 1);
+    if (!touchOnly) outline(cursor, PAL.muted, 1);
     ctx.restore();
 
-    if (state.status === "levelclear" && !busy) overlay(state.level >= MAX_LEVEL ? `All ${MAX_LEVEL} levels cleared!` : `Level clear! ${"\u2605".repeat(state.stars)} (Enter)`);
-    else if (state.status === "over" && !busy) overlay("Out of moves (R retry)");
+    if (state.status === "levelclear" && !busy) overlay(state.level >= MAX_LEVEL ? `All ${MAX_LEVEL} levels cleared!` : `Level clear! ${"\u2605".repeat(state.stars)} (Enter / tap)`);
+    else if (state.status === "over" && !busy) overlay("Out of moves (R / tap)");
     else if (paused) overlay("Paused");
   }
 
@@ -1013,19 +1039,42 @@ if (typeof document !== "undefined") {
     busy = false;
   }
 
+  function retry() {
+    paused = false;
+    if (state.endless) startEndless(state); else startLevel(state, state.level);
+    newBoard();
+  }
+
+  function advance() {
+    if (nextLevel(state)) newBoard();
+  }
+
+  function showHint() {
+    if (state.status !== "play" || busy || paused || panelOpen) return;
+    hint = findMove(state.board);
+    selected = null;
+  }
+
+  // Tap the board when a level is over: continue / retry (no keyboard on phones).
+  canvas.addEventListener("pointerdown", () => {
+    if (busy || panelOpen) return;
+    if (state.status === "levelclear") advance();
+    else if (state.status === "over") retry();
+  });
+
   document.addEventListener("keydown", (e) => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === "l") { togglePanel(); }
     else if (key === "Escape" && panelOpen) togglePanel(false);
     else if (panelOpen || busy) return;
-    else if (key === "r") { paused = false; if (state.endless) startEndless(state); else startLevel(state, state.level); newBoard(); }
+    else if (key === "r") retry();
     else if (key === "p" && state.status === "play") paused = !paused;
-    else if (key === "Enter" && state.status === "levelclear") { if (nextLevel(state)) newBoard(); }
+    else if (key === "Enter" && state.status === "levelclear") advance();
     else if (paused) return;
     else if (key === "Escape" && armed) { armed = null; say(goalText()); }
     else if (armed && (key === " " || key === "Enter")) usePower(cursor);
     else if (key === "1" || key === "2" || key === "3") arm(POWERUPS[Number(key) - 1]);
-    else if (key === "h" && state.status === "play") { hint = findMove(state.board); selected = null; }
+    else if (key === "h") showHint();
     else if (arrows[key]) {
       const [dx, dy] = arrows[key];
       if (selected) {
@@ -1075,6 +1124,8 @@ if (typeof document !== "undefined") {
 
   el("endless").addEventListener("click", () => { if (!busy) { startEndless(state); paused = false; togglePanel(false); newBoard(); } });
   for (const p of POWERUPS) el(`pu-${p}`).addEventListener("click", () => arm(p));
+  el("btn-hint").addEventListener("click", showHint);
+  el("btn-retry").addEventListener("click", () => { if (!busy && !panelOpen) retry(); });
   el("levels-btn").addEventListener("click", () => togglePanel());
   el("levels-close").addEventListener("click", () => togglePanel(false));
 

@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Snake</title>
+  <script>!function(){var r=document.documentElement;if(r.getAttribute("data-theme"))return;var s=null;try{s=localStorage.getItem("kit-theme")}catch(e){}if(!s&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)s="dark";r.setAttribute("data-theme",s||"light");r.setAttribute("data-theme-auto","")}()</script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,7 +12,18 @@
     <h1>Snake</h1>
     <p>Score: <span id="score">0</span> · Best: <span id="best">0</span></p>
     <canvas id="game" width="400" height="400"></canvas>
-    <p class="hint">Arrows/WASD steer · P pause · R restart</p>
+    <div class="bar touch-only">
+      <button id="btn-pause" type="button">Pause</button>
+      <button id="btn-restart" type="button">Restart</button>
+    </div>
+    <div class="dpad touch-only" aria-label="Steer">
+      <button data-dir="up" type="button" aria-label="Up">&uarr;</button>
+      <button data-dir="left" type="button" aria-label="Left">&larr;</button>
+      <button data-dir="down" type="button" aria-label="Down">&darr;</button>
+      <button data-dir="right" type="button" aria-label="Right">&rarr;</button>
+    </div>
+    <p class="hint kbd-hint">Arrows/WASD steer · P pause · R restart</p>
+    <p class="hint touch-only">Swipe or use the arrows · tap the board after game over</p>
   </main>
   <script src="game.js"></script>
 </body>

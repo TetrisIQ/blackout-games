@@ -8,3 +8,4 @@ controls:
   - "Arrow keys / WASD: steer"
   - "P: pause"
   - "R: restart"
+  - "Touch: swipe or on-screen arrows"
