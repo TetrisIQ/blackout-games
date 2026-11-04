@@ -1,0 +1,41 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/check.mjs
+      - name: Logic tests
+        run: |
+          for t in */test; do
+            [ -d "$t" ] && node --test "$t"
+          done
+      - name: Build packages and catalog
+        run: node tools/build-catalog.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/dist"
+      # Never publish a catalog that kit would reject.
+      - uses: actions/checkout@v4
+        with:
+          repository: TetrisIQ/blackout-tool
+          path: kit
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kit
+      - run: cargo build --release --locked --manifest-path kit/Cargo.toml
+      - run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ runner.temp }}/dist/*.zip
+            ${{ runner.temp }}/dist/catalog.tar.gz
+            ${{ runner.temp }}/dist/catalog.tar.gz.sha256

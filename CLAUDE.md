@@ -5,6 +5,7 @@ Katalog einfacher Spiele (Tetris, Snake, ...), mit Claude nachgebaut. Vanilla HT
 ## Commands
 - `node tools/check.mjs` - validiert `template/` und alle Spiele (game.yaml, Pflichtdateien, keine Netzwerk-URLs)
 - `node --test <spiel>/test/` - Logik-Tests eines Spiels (falls vorhanden)
+- `node tools/build-catalog.mjs --tag v0.0.0-test --out <dir>` - baut `<id>.zip` und den kit-Katalog (`<dir>/catalog`, prüfen mit `kit catalog check <dir>/catalog`)
 - `cd <spiel> && python -m http.server 8000` - Spiel lokal ansehen
 
 ## Rules
@@ -17,3 +18,4 @@ Katalog einfacher Spiele (Tetris, Snake, ...), mit Claude nachgebaut. Vanilla HT
 7. Highscores nur in `localStorage`, Schlüssel `<id>:<name>`.
 8. Tastatursteuerung, wenn sinnvoll auch Touch; Pause-Taste; kein Autoplay-Sound.
 9. Kleine, reviewbare Commits, ein Spiel pro Commit (`add <id>`). README-Spieltabelle mitpflegen.
+10. Pakete: `release.yml` baut pro Tag je Spiel ein Zip (ohne `test/`) und einen kit-Katalog (`type: files`, `content: {media: games, extract: zip}`); Manifest-Felder kommen aus `game.yaml`. Dafür braucht `kit` keine Änderung; `kit` selbst wird von hier aus nie verändert.

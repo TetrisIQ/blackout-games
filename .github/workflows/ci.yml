@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate games
+        run: node tools/check.mjs
+      - name: Logic tests
+        run: |
+          for t in */test; do
+            [ -d "$t" ] && node --test "$t"
+          done
+      - name: Build packages and catalog
+        run: node tools/build-catalog.mjs --tag ci --out "$RUNNER_TEMP/dist"
+      - uses: actions/checkout@v4
+        with:
+          repository: TetrisIQ/blackout-tool
+          path: kit
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kit
+      - run: cargo build --release --locked --manifest-path kit/Cargo.toml
+      - name: Check the catalog with kit
+        run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"

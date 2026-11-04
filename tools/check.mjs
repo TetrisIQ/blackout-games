@@ -1,29 +1,11 @@
 #!/usr/bin/env node
 // Validates template/ and every game folder. No dependencies.
-import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { root, parseYaml, listDirs } from "./lib.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REQUIRED_FILES = ["game.yaml", "README.md", "index.html", "game.js", "style.css"];
 const KEYS = ["id", "title", "description", "license", "version", "entry", "controls"];
-const SKIP = new Set(["docs", "tools", "node_modules"]);
-
-// Parses the flat subset used by game.yaml: `key: value` and `key:` + `  - item` lists.
-function parseYaml(text) {
-  const out = {};
-  let list = null;
-  for (const raw of text.split("\n")) {
-    if (!raw.trim() || raw.trim().startsWith("#")) continue;
-    const item = raw.match(/^\s+-\s+(.*)$/);
-    if (item && list) { out[list].push(item[1].replace(/^"(.*)"$/, "$1")); continue; }
-    const kv = raw.match(/^([A-Za-z_]+):\s*(.*)$/);
-    if (!kv) throw new Error(`unparsable line: ${raw}`);
-    if (kv[2] === "") { out[kv[1]] = []; list = kv[1]; }
-    else { out[kv[1]] = kv[2].replace(/^"(.*)"$/, "$1"); list = null; }
-  }
-  return out;
-}
 
 function checkGame(dir) {
   const errors = [];
@@ -50,11 +32,8 @@ function checkGame(dir) {
   return errors;
 }
 
-const dirs = readdirSync(root).filter(
-  (d) => !d.startsWith(".") && !SKIP.has(d) && statSync(join(root, d)).isDirectory(),
-);
 let failed = false;
-for (const dir of dirs) {
+for (const dir of listDirs()) {
   const errors = checkGame(dir);
   if (errors.length) { failed = true; console.error(`FAIL ${dir}\n  - ${errors.join("\n  - ")}`); }
   else console.log(`ok   ${dir}`);
