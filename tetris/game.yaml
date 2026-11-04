@@ -1,0 +1,13 @@
+id: tetris
+title: Tetris
+description: Falling-blocks puzzle on a 10x20 board with ghost piece, next preview and levels.
+license: MIT
+version: 0.1.0
+entry: index.html
+controls:
+  - "Left/Right (A/D): move"
+  - "Up (W/X): rotate"
+  - "Down (S): soft drop"
+  - "Space: hard drop"
+  - "P: pause"
+  - "R: restart"

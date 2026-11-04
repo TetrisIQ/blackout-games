@@ -16,7 +16,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 ## Spiele
 | id | Titel |
 |----|-------|
-| _noch keine_ | |
+| [tetris](tetris/) | Tetris |
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.
