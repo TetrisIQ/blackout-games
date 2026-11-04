@@ -15,4 +15,4 @@ Steuere eine wachsende Schlange über ein 20×20 Feld.
 - Highscore wird in `localStorage` (`snake:best`) gespeichert.
 
 ## Tests
-    node --test snake/test/
+    node --test snake/test/*.test.js

@@ -18,7 +18,7 @@ jobs:
       - name: Logic tests
         run: |
           for t in */test; do
-            [ -d "$t" ] && node --test "$t"
+            [ -d "$t" ] && node --test "$t"/*.test.js
           done
       - name: Build packages and catalog
         run: node tools/build-catalog.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/dist"

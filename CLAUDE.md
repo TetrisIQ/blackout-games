@@ -4,7 +4,7 @@ Katalog einfacher Spiele (Tetris, Snake, ...), mit Claude nachgebaut. Vanilla HT
 
 ## Commands
 - `node tools/check.mjs` - validiert `template/` und alle Spiele (game.yaml, Pflichtdateien, keine Netzwerk-URLs)
-- `node --test <spiel>/test/` - Logik-Tests eines Spiels (falls vorhanden)
+- `node --test <spiel>/test/*.test.js` - Logik-Tests eines Spiels (falls vorhanden)
 - `node tools/build-catalog.mjs --tag v0.0.0-test --out <dir>` - baut `<id>.zip` und den kit-Katalog (`<dir>/catalog`, prüfen mit `kit catalog check <dir>/catalog`)
 - `cd <spiel> && python -m http.server 8000` - Spiel lokal ansehen
 

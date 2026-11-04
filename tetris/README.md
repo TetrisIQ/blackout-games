@@ -17,4 +17,4 @@ Klassisches Falling-Blocks-Puzzle auf einem 10×20 Feld.
 - Highscore wird in `localStorage` (`tetris:best`) gespeichert.
 
 ## Tests
-    node --test tetris/test/
+    node --test tetris/test/*.test.js
