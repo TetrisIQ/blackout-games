@@ -4,7 +4,9 @@ const W = 8;
 const H = 8;
 const TYPES = 6; // most gem types a level can use
 const COLOR = -1; // type of a colour gem; it never matches on its own
-const MAX_LEVEL = 100;
+const ROCK = -2; // type of a blocked cell: never moves, never clears
+const WORLD_SIZE = 100;
+const MAX_LEVEL = 200; // world 1 (classic) + world 2 (walls and cages)
 const BONUS_PER_MOVE = 50;
 const POWERUPS = ["hammer", "bomb", "rainbow"]; // earned in endless mode, usable everywhere
 const AWARD_CHANCE = 0.5; // per combo of 4+ gems in endless mode
@@ -14,22 +16,101 @@ const TARGET_STEP = 18;
 const TARGET_CURVE = 0;
 
 // --- Logic (no DOM; testable with node) ---------------------------------
-// A gem is { t: type 0..TYPES-1 (or COLOR), s: null | "row" | "col" | "blast" | "color" }.
+// A gem is { t: type 0..TYPES-1 (or COLOR / ROCK), s: null | "row" | "col" | "blast" | "color" | "rock", c: cage hits left }.
+// Rocks and caged gems are fixed: they cannot be swapped and do not fall. A cage takes a hit whenever its gem or a
+// neighbouring cell clears (match, special or powerup) and breaks after c hits; the gem is then a normal gem.
 // Cells are addressed as flat indexes y * W + x inside sets; positions are { x, y }.
 
-const gem = (t, s = null) => ({ t, s });
+const gem = (t, s = null, c = 0) => ({ t, s, c });
+const isRock = (g) => !!g && g.t === ROCK;
+const isFixed = (g) => !!g && (g.t === ROCK || g.c > 0);
 const idx = (x, y) => y * W + x;
 const at = (i) => ({ x: i % W, y: Math.floor(i / W) });
 const inBoard = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
-const cloneBoard = (b) => b.map((r) => r.map((c) => c && { t: c.t, s: c.s }));
+const cloneBoard = (b) => b.map((r) => r.map((c) => c && { t: c.t, s: c.s, c: c.c || 0 }));
+const cagesLeft = (b) => b.flat().filter((g) => g && g.c > 0).length;
 
-// Difficulty grows with the level: fewer moves, higher goal.
+// World 2 layouts: rock patterns (cells that are blocked) ...
+const PATTERNS = [
+  [[0, 0], [7, 0], [0, 7], [7, 7]],
+  [[2, 2], [5, 2], [2, 5], [5, 5]],
+  [[3, 3], [4, 3], [3, 4], [4, 4]],
+  [[3, 0], [4, 0], [3, 7], [4, 7]],
+  [[1, 3], [2, 3], [5, 4], [6, 4]],
+  [[0, 0], [1, 0], [0, 1], [7, 0], [6, 0], [7, 1], [0, 7], [1, 7], [0, 6], [7, 7], [6, 7], [7, 6]],
+  [[3, 2], [4, 2], [3, 5], [4, 5], [2, 3], [2, 4], [5, 3], [5, 4]],
+  [[1, 1], [6, 1], [3, 3], [4, 4], [1, 6], [6, 6]],
+  [[0, 3], [0, 4], [7, 3], [7, 4], [3, 0], [4, 0]],
+  [[0, 0], [1, 0], [0, 1], [7, 7], [6, 7], [7, 6], [3, 3], [4, 4]],
+  [[1, 3], [2, 3], [5, 3], [6, 3], [1, 4], [2, 4], [5, 4], [6, 4]],
+  [[2, 1], [3, 1], [4, 5], [5, 5], [1, 4], [6, 2]],
+];
+
+// Ways to line up three with the caged gem at (x, y), not counting windows with a rock or another (immovable) cage.
+function matchWindows(x, y, blocked) {
+  const free = (xx, yy) => (inBoard(xx, yy) && !blocked.has(idx(xx, yy))) || (xx === x && yy === y);
+  let n = 0;
+  for (let k = 0; k < 3; k++) {
+    if ([0, 1, 2].every((d) => free(x - k + d, y))) n++;
+    if ([0, 1, 2].every((d) => free(x, y - k + d))) n++;
+  }
+  return n;
+}
+
+// ... plus cages on free cells. Deterministic per level; i = 0..99 within the world.
+const layoutCache = new Map();
+function makeLayout(i) {
+  if (layoutCache.has(i)) return layoutCache.get(i);
+  const cells = new Set(PATTERNS[i % PATTERNS.length].map(([x, y]) => idx(x, y)));
+  if (i >= 50) for (const [x, y] of PATTERNS[(i * 5 + 3) % PATTERNS.length]) cells.add(idx(x, y));
+  const rnd = seeded(1000 + i);
+  const candidates = [];
+  for (let n = 0; n < W * H; n++) if (!cells.has(n)) candidates.push(n);
+  for (let k = candidates.length - 1; k > 0; k--) {
+    const j = Math.floor(rnd() * (k + 1));
+    [candidates[k], candidates[j]] = [candidates[j], candidates[k]];
+  }
+  const count = i < 5 ? 0 : Math.min(20, 2 + Math.floor((i - 5) / 5));
+  const chosen = [];
+  for (const n of candidates) {
+    if (chosen.length >= count) break;
+    const next = [...chosen, n];
+    // every cage (old and new) keeps at least 2 windows free of rocks and of the other cages
+    if (next.every((c) => matchWindows(c % W, Math.floor(c / W), new Set([...cells, ...next.filter((o) => o !== c)])) >= 2)) chosen.push(n);
+  }
+  const cages = chosen.map((n, k) => {
+    const hp = (i >= 70 && k % 2 === 0) || (i >= 30 && k % 3 === 0) ? 2 : 1;
+    return [n % W, Math.floor(n / W), hp];
+  });
+  const layout = { rocks: [...cells].map((n) => [n % W, Math.floor(n / W)]), cages };
+  layoutCache.set(i, layout);
+  return layout;
+}
+
+// Small seeded PRNG so layouts are the same every time.
+function seeded(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Difficulty grows with the level: fewer moves, higher goal. World 2 (levels 101+) adds rocks and cages;
+// all cages have to be broken as well as the score reached.
 function levelConfig(level) {
   const n = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
-  const types = TYPES;
+  if (n > WORLD_SIZE) {
+    const i = n - WORLD_SIZE - 1;
+    const layout = makeLayout(i);
+    const hits = layout.cages.reduce((sum, c) => sum + c[2], 0);
+    const moves = 22 + Math.ceil(hits * 0.8) - Math.floor(i / 20);
+    return { level: n, types: TYPES, moves, target: Math.round((800 + 14 * i) / 50) * 50, layout };
+  }
   const moves = 22 - Math.floor((n - 1) / 16);
   const target = Math.round((TARGET_BASE + TARGET_STEP * (n - 1) + TARGET_CURVE * (n - 1) * (n - 1)) / 50) * 50;
-  return { level: n, types, moves, target };
+  return { level: n, types: TYPES, moves, target, layout: { rocks: [], cages: [] } };
 }
 
 // 3 stars with at least half the moves left, 2 with a quarter, else 1.
@@ -41,7 +122,7 @@ function findGroups(board) {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; ) {
       const c = board[y][x];
-      if (!c || c.t === COLOR) { x++; continue; }
+      if (!c || c.t < 0) { x++; continue; }
       let e = x + 1;
       while (e < W && board[y][e] && board[y][e].t === c.t) e++;
       if (e - x >= 3) runs.push({ dir: "h", t: c.t, cells: Array.from({ length: e - x }, (_, k) => idx(x + k, y)) });
@@ -51,7 +132,7 @@ function findGroups(board) {
   for (let x = 0; x < W; x++) {
     for (let y = 0; y < H; ) {
       const c = board[y][x];
-      if (!c || c.t === COLOR) { y++; continue; }
+      if (!c || c.t < 0) { y++; continue; }
       let e = y + 1;
       while (e < H && board[e][x] && board[e][x].t === c.t) e++;
       if (e - y >= 3) runs.push({ dir: "v", t: c.t, cells: Array.from({ length: e - y }, (_, k) => idx(x, y + k)) });
@@ -98,13 +179,13 @@ function expand(state, set) {
   while (queue.length) {
     const { x, y } = at(queue.pop());
     const c = board[y][x];
-    if (!c || !c.s) continue;
+    if (!c || !c.s || c.s === "rock") continue;
     if (c.s === "row") for (let k = 0; k < W; k++) add(k, y);
     else if (c.s === "col") for (let k = 0; k < H; k++) add(x, k);
     else if (c.s === "blast") for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) add(x + dx, y + dy);
     else if (c.s === "color") {
       // Hit by another special instead of swapped: clears a random colour present on the board.
-      const present = [...new Set(board.flat().filter((g) => g && g.t !== COLOR).map((g) => g.t))];
+      const present = [...new Set(board.flat().filter((g) => g && g.t >= 0).map((g) => g.t))];
       if (present.length) {
         const t = present[Math.floor(state.random() * present.length)];
         for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) if (board[yy][xx] && board[yy][xx].t === t) add(xx, yy);
@@ -113,13 +194,21 @@ function expand(state, set) {
   }
 }
 
-// Gravity: gems fall down, new random gems fill the top.
+// Gravity: gems fall down inside each column segment (between rocks / caged gems); new random gems fill
+// the top of every segment.
 function settle(state) {
+  const b = state.board;
   for (let x = 0; x < W; x++) {
-    const col = [];
-    for (let y = H - 1; y >= 0; y--) if (state.board[y][x]) col.push(state.board[y][x]);
-    for (let y = H - 1, k = 0; y >= 0; y--, k++) {
-      state.board[y][x] = k < col.length ? col[k] : gem(Math.floor(state.random() * state.types));
+    let y = H - 1;
+    while (y >= 0) {
+      if (isFixed(b[y][x])) { y--; continue; }
+      let top = y;
+      while (top >= 0 && !isFixed(b[top][x])) top--;
+      top++;
+      const col = [];
+      for (let r = y; r >= top; r--) if (b[r][x]) col.push(b[r][x]);
+      for (let r = y, k = 0; r >= top; r--, k++) b[r][x] = k < col.length ? col[k] : gem(Math.floor(state.random() * state.types));
+      y = top - 1;
     }
   }
 }
@@ -136,11 +225,29 @@ function resolve(state, forced, prefs) {
       if (g.cells.size > 3) combos++;
       g.cells.forEach((c) => clear.add(c));
       const sp = specialFor(g, prefs);
-      if (sp) creates.push(sp);
+      if (sp && !isFixed(state.board[at(sp.idx).y][at(sp.idx).x])) creates.push(sp);
     }
     if (!clear.size) break;
     expand(state, clear);
     for (const c of creates) clear.delete(c.idx); // new specials survive
+    // Rocks never clear. A cage takes one hit per step when its gem or a neighbouring cell clears; when the
+    // last hit lands the cage breaks (the gem clears if it was part of the clear, otherwise it is free).
+    for (const i of [...clear]) if (isRock(state.board[at(i).y][at(i).x])) clear.delete(i);
+    const damaged = [];
+    const broken = [];
+    const hit = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const c = state.board[y][x];
+        if (!c || !(c.c > 0)) continue;
+        const near = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => inBoard(x + dx, y + dy) && clear.has(idx(x + dx, y + dy)));
+        if (near) hit.push({ x, y, c });
+      }
+    }
+    for (const { x, y, c } of hit) {
+      c.c--;
+      if (c.c > 0) { clear.delete(idx(x, y)); damaged.push({ x, y, c: c.c }); } else broken.push({ x, y });
+    }
     const points = clear.size * 10 * cascade;
     const cleared = [...clear].map(at);
     for (const p of cleared) state.board[p.y][p.x] = null;
@@ -153,6 +260,8 @@ function resolve(state, forced, prefs) {
       points,
       cascade,
       combos,
+      damaged,
+      broken,
       board: cloneBoard(state.board),
     });
     prefs = [];
@@ -165,7 +274,7 @@ function evaluateSwap(board, a, b) {
   const bd = cloneBoard(board);
   const ga = bd[a.y][a.x];
   const gb = bd[b.y][b.x];
-  if (!ga || !gb) return { valid: false };
+  if (!ga || !gb || isFixed(ga) || isFixed(gb)) return { valid: false };
   bd[a.y][a.x] = gb;
   bd[b.y][b.x] = ga;
   const ia = idx(a.x, a.y);
@@ -215,12 +324,14 @@ function findMove(board) {
 }
 
 // Board with no pending matches and at least one valid move.
-function createBoard(random = Math.random, types = TYPES) {
+function createBoard(random = Math.random, types = TYPES, layout = { rocks: [], cages: [] }) {
+  const rocks = new Set(layout.rocks.map(([x, y]) => idx(x, y)));
   for (;;) {
     const b = [];
     for (let y = 0; y < H; y++) {
       const row = [];
       for (let x = 0; x < W; x++) {
+        if (rocks.has(idx(x, y))) { row.push(gem(ROCK, "rock")); continue; }
         const bad = new Set();
         if (x >= 2 && row[x - 1].t === row[x - 2].t) bad.add(row[x - 1].t);
         if (y >= 2 && b[y - 1][x].t === b[y - 2][x].t) bad.add(b[y - 1][x].t);
@@ -229,6 +340,7 @@ function createBoard(random = Math.random, types = TYPES) {
       }
       b.push(row);
     }
+    for (const [x, y, hp] of layout.cages) b[y][x].c = hp;
     if (findMove(b)) return b;
   }
 }
@@ -254,7 +366,8 @@ function startLevel(state, level) {
   state.endless = false;
   state.powerups ??= { hammer: 0, bomb: 0, rainbow: 0 }; // the inventory survives level changes
   state.status = "play";
-  state.board = createBoard(state.random, cfg.types);
+  state.layout = cfg.layout;
+  state.board = createBoard(state.random, cfg.types, cfg.layout);
   return state;
 }
 
@@ -278,16 +391,20 @@ function ensurePlayable(state) {
 
 // Reshuffles the existing gems until there are no matches and a move exists.
 function shuffle(state) {
+  // Only free gems move; rocks and caged gems stay where they are.
+  const free = [];
+  state.board.forEach((row, y) => row.forEach((g, x) => { if (g && !isFixed(g)) free.push({ x, y }); }));
   for (let n = 0; n < 200; n++) {
-    const gems = state.board.flat();
+    const gems = free.map((p) => state.board[p.y][p.x]);
     for (let i = gems.length - 1; i > 0; i--) {
       const j = Math.floor(state.random() * (i + 1));
       [gems[i], gems[j]] = [gems[j], gems[i]];
     }
-    const b = Array.from({ length: H }, (_, y) => gems.slice(y * W, (y + 1) * W));
+    const b = cloneBoard(state.board);
+    free.forEach((p, k) => { b[p.y][p.x] = gems[k]; });
     if (!findGroups(b).length && findMove(b)) { state.board = b; return; }
   }
-  state.board = createBoard(state.random, state.types);
+  state.board = createBoard(state.random, state.types, state.layout);
 }
 
 // Weighted random powerup type (see POWERUP_WEIGHTS).
@@ -329,7 +446,7 @@ function trySwap(state, a, b) {
   const steps = resolve(state, info.forced, [idx(a.x, a.y), idx(b.x, b.y)]);
   const shuffled = ensurePlayable(state);
   let bonus = 0;
-  if (state.score >= state.target) {
+  if (state.score >= state.target && cagesLeft(state.board) === 0) {
     bonus = state.movesLeft * BONUS_PER_MOVE;
     state.score += bonus;
     state.status = "levelclear";
@@ -346,9 +463,9 @@ function trySwap(state, a, b) {
 function usePowerup(state, type, pos) {
   const none = { valid: false, steps: [], shuffled: false, bonus: 0, awards: [] };
   if (state.status !== "play" || !POWERUPS.includes(type) || !(state.powerups[type] > 0)) return none;
-  if (!inBoard(pos.x, pos.y) || !state.board[pos.y][pos.x]) return none;
+  if (!inBoard(pos.x, pos.y) || !state.board[pos.y][pos.x] || isRock(state.board[pos.y][pos.x])) return none;
   const target = state.board[pos.y][pos.x];
-  if (type === "rainbow" && target.t === COLOR) return none;
+  if (type === "rainbow" && target.t < 0) return none;
   const forced = new Set();
   if (type === "hammer") forced.add(idx(pos.x, pos.y));
   else if (type === "bomb") {
@@ -372,7 +489,7 @@ function nextLevel(state) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    W, H, TYPES, COLOR, MAX_LEVEL, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
+    W, H, TYPES, COLOR, ROCK, WORLD_SIZE, MAX_LEVEL, cagesLeft, isFixed, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
     findMove, createBoard, createState, shuffle, trySwap, nextLevel,
   };
 }
@@ -471,10 +588,11 @@ if (typeof document !== "undefined") {
   // New board: gems drop in from above, column by column.
   async function intro() {
     setBoard(state.board);
-    const start = new Map(sprites.map((s) => [s, s.y]));
-    for (const s of sprites) s.y -= H + 1 + s.x * 0.6 + Math.random();
-    const from = new Map(sprites.map((s) => [s, s.y]));
-    await tween(700, (t) => { for (const s of sprites) s.y = from.get(s) + (start.get(s) - from.get(s)) * t; }, easeBack);
+    const falling = sprites.filter((s) => !isRock(s.g)); // rocks are just there
+    const start = new Map(falling.map((s) => [s, s.y]));
+    for (const s of falling) s.y -= H + 1 + s.x * 0.6 + Math.random();
+    const from = new Map(falling.map((s) => [s, s.y]));
+    await tween(700, (t) => { for (const s of falling) s.y = from.get(s) + (start.get(s) - from.get(s)) * t; }, easeBack);
     setBoard(state.board);
   }
 
@@ -503,9 +621,21 @@ if (typeof document !== "undefined") {
     }
     const born = sprites.filter((s) => s.sc > 1);
     for (const s of doomed) burst(s.x, s.y, s.g);
-    const cx = step.cleared.reduce((a, p) => a + p.x, 0) / step.cleared.length;
-    const cy = step.cleared.reduce((a, p) => a + p.y, 0) / step.cleared.length;
-    popup(cx, cy, `+${step.points}`, 18 + Math.min(14, step.cascade * 3));
+    // Cages: a hit that does not break the cage shakes it, a broken cage bursts into grey chips.
+    const hurt = [];
+    for (const d of step.damaged) { const s = spriteAt(d.x, d.y); if (s) { s.g = { ...s.g, c: d.c }; hurt.push(s); } }
+    for (const b of step.broken) {
+      const s = spriteAt(b.x, b.y);
+      if (!s) continue;
+      burst(s.x, s.y, { t: COLOR });
+      if (!gone.has(key(b.x, b.y))) { s.g = { ...s.g, c: 0 }; hurt.push(s); }
+    }
+    if (hurt.length) shake = Math.max(shake, 3);
+    if (step.cleared.length) {
+      const cx = step.cleared.reduce((a, p) => a + p.x, 0) / step.cleared.length;
+      const cy = step.cleared.reduce((a, p) => a + p.y, 0) / step.cleared.length;
+      popup(cx, cy, `+${step.points}`, 18 + Math.min(14, step.cascade * 3));
+    }
     if (step.cascade > 1) popup(W / 2 - 0.5, H / 2 - 0.5, `Cascade x${step.cascade}!`, 26);
     if (step.cleared.length >= 8) shake = Math.max(shake, Math.min(10, step.cleared.length / 2));
     targetScore += step.points;
@@ -513,34 +643,53 @@ if (typeof document !== "undefined") {
     await tween(230, (t) => {
       for (const s of doomed) { s.sc = 1 - t; s.al = 1 - t * 0.6; s.flash = Math.sin(Math.min(1, t * 2) * Math.PI / 2) * (1 - t); }
       for (const s of born) s.sc = 1.6 - 0.6 * t;
+      for (const s of hurt) s.flash = 0.8 * (1 - t);
     }, easeOut);
     sprites = sprites.filter((s) => !doomed.includes(s));
 
-    // Gravity: survivors keep their order and drop to the bottom, new gems enter from above.
+    // Gravity per column segment (between rocks / caged gems): survivors drop to the segment bottom, new gems
+    // enter from above the board, or pop in when the segment starts below the top row.
     const moves = [];
     let far = 1;
+    const fixedAt = (col, r) => col[r] && isFixed(col[r].g);
     for (let x = 0; x < W; x++) {
-      const col = sprites.filter((s) => Math.round(s.x) === x).sort((a, b) => b.y - a.y);
-      col.forEach((s, k) => { moves.push({ s, from: s.y, to: H - 1 - k }); far = Math.max(far, H - 1 - k - s.y); });
-      const missing = H - col.length;
-      for (let r = 0; r < missing; r++) {
-        const s = { g: step.board[r][x], x, y: r - missing, sc: 1, al: 1, flash: 0 };
-        sprites.push(s);
-        moves.push({ s, from: s.y, to: r });
-        far = Math.max(far, missing);
+      const col = Array.from({ length: H }, () => null);
+      for (const s of sprites) if (Math.round(s.x) === x) col[Math.round(s.y)] = s;
+      let y = H - 1;
+      while (y >= 0) {
+        if (fixedAt(col, y)) { y--; continue; }
+        let top = y;
+        while (top >= 0 && !fixedAt(col, top)) top--;
+        top++;
+        const surv = [];
+        for (let r = y; r >= top; r--) if (col[r]) surv.push(col[r]);
+        surv.forEach((sp, k) => { moves.push({ s: sp, from: sp.y, to: y - k }); far = Math.max(far, y - k - sp.y); });
+        const missing = y - top + 1 - surv.length;
+        for (let m = 0; m < missing; m++) {
+          const r = top + m;
+          const pop = top > 0;
+          const sp = { g: step.board[r][x], x, y: pop ? r : r - missing, sc: pop ? 0 : 1, al: 1, flash: 0 };
+          sprites.push(sp);
+          moves.push({ s: sp, from: sp.y, to: r, pop });
+          far = Math.max(far, pop ? 1 : missing);
+        }
+        y = top - 1;
       }
     }
-    await tween(140 + 55 * far, (t) => { for (const m of moves) m.s.y = m.from + (m.to - m.from) * t; }, easeBack);
+    await tween(140 + 55 * far, (t) => {
+      for (const m of moves) { m.s.y = m.from + (m.to - m.from) * t; if (m.pop) m.s.sc = Math.min(1, t * 1.5); }
+    }, easeBack);
     setBoard(step.board);
     await tween(90, () => {});
   }
 
   async function shuffleAnim() {
     say("No moves left - board shuffled");
-    await tween(220, (t) => { for (const s of sprites) s.sc = 1 - t; }, easeOut);
+    const movable = () => sprites.filter((s) => !isFixed(s.g));
+    await tween(220, (t) => { for (const s of movable()) s.sc = 1 - t; }, easeOut);
     setBoard(state.board);
-    for (const s of sprites) s.sc = 0;
-    await tween(300, (t) => { for (const s of sprites) s.sc = t; }, easeBack);
+    for (const s of movable()) s.sc = 0;
+    await tween(300, (t) => { for (const s of movable()) s.sc = t; }, easeBack);
   }
 
   // --- drawing ---
@@ -569,6 +718,19 @@ if (typeof document !== "undefined") {
     ctx.globalAlpha = s.al;
     ctx.translate((s.x + 0.5) * cell, (s.y + 0.5) * cell);
     ctx.scale(sc, sc);
+    if (isRock(s.g)) {
+      const h = cell * 0.46;
+      ctx.fillStyle = "#4a4f57";
+      ctx.fillRect(-h, -h, h * 2, h * 2);
+      ctx.fillStyle = "#6b727d";
+      ctx.fillRect(-h, -h, h * 2, h * 0.35);
+      ctx.fillRect(-h, -h, h * 0.35, h * 2);
+      ctx.fillStyle = "#2f3338";
+      ctx.fillRect(-h, h * 0.7, h * 2, h * 0.3);
+      ctx.fillRect(h * 0.7, -h, h * 0.3, h * 2);
+      ctx.restore();
+      return;
+    }
     if (s.g.t === COLOR) {
       ctx.rotate(now / 600);
       ctx.fillStyle = `hsl(${(now / 6) % 360}, 85%, 62%)`;
@@ -588,7 +750,20 @@ if (typeof document !== "undefined") {
     if (s.flash > 0) {
       ctx.globalAlpha = s.flash;
       ctx.fillStyle = "#fff";
-      shape(s.g.t === COLOR ? 5 : s.g.t, r * 1.1);
+      shape(s.g.t < 0 ? 5 : s.g.t, r * 1.1);
+    }
+    if (s.g.c > 0) {
+      // cage: bars over the gem; gold and double when it takes two hits
+      const h = cell * 0.43;
+      ctx.globalAlpha = s.al;
+      ctx.strokeStyle = s.g.c > 1 ? "#ffca28" : "#cfd8dc";
+      ctx.lineWidth = s.g.c > 1 ? 4 : 3;
+      ctx.strokeRect(-h, -h, h * 2, h * 2);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const k of [-0.45, 0, 0.45]) { ctx.moveTo(k * h, -h); ctx.lineTo(k * h, h); }
+      if (s.g.c > 1) for (const k of [-0.45, 0, 0.45]) { ctx.moveTo(-h, k * h); ctx.lineTo(h, k * h); }
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -649,7 +824,7 @@ if (typeof document !== "undefined") {
     outline(cursor, "rgba(255,255,255,0.35)", 1);
     ctx.restore();
 
-    if (state.status === "levelclear" && !busy) overlay(state.level >= MAX_LEVEL ? "All 100 levels cleared!" : `Level clear! ${"\u2605".repeat(state.stars)} (Enter)`);
+    if (state.status === "levelclear" && !busy) overlay(state.level >= MAX_LEVEL ? `All ${MAX_LEVEL} levels cleared!` : `Level clear! ${"\u2605".repeat(state.stars)} (Enter)`);
     else if (state.status === "over" && !busy) overlay("Out of moves (R retry)");
     else if (paused) overlay("Paused");
   }
@@ -667,6 +842,9 @@ if (typeof document !== "undefined") {
     goal.max = state.endless ? 1 : state.target;
     goal.value = Math.max(0, state.endless ? 0 : Math.min(goal.max, Math.round(shownScore)));
     el("powerups").hidden = false;
+    const cages = cagesLeft(state.board);
+    el("cages-wrap").hidden = !state.layout.cages.length;
+    el("cages").textContent = cages;
     POWERUPS.forEach((p, i) => {
       const b = el(`pu-${p}`);
       b.textContent = `${LABELS[p]} x${state.powerups[p]} (${i + 1})`;
@@ -691,7 +869,7 @@ if (typeof document !== "undefined") {
 
   const goalText = () => state.endless
     ? "Endless: no goal, no move limit - the board reshuffles when you get stuck"
-    : `Goal: ${state.target} points in ${state.moves} moves (${levelConfig(state.level).types} colours)`;
+    : `Goal: ${state.target} points${state.layout.cages.length ? ` and break all ${state.layout.cages.length} cages` : ""} in ${state.moves} moves`;
 
   // Stores the result of the current level and unlocks the next one.
   function recordResult() {
@@ -769,16 +947,17 @@ if (typeof document !== "undefined") {
 
   // Cells the armed powerup would hit at the cursor (for the preview).
   function previewCells() {
+    if (isRock(state.board[cursor.y][cursor.x])) return [];
     if (armed === "hammer") return [cursor];
     if (armed === "bomb") {
       const out = [];
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inBoard(cursor.x + dx, cursor.y + dy)) out.push({ x: cursor.x + dx, y: cursor.y + dy });
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inBoard(cursor.x + dx, cursor.y + dy) && !isRock(state.board[cursor.y + dy][cursor.x + dx])) out.push({ x: cursor.x + dx, y: cursor.y + dy });
       return out;
     }
     const t = state.board[cursor.y][cursor.x].t;
     const out = [];
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (state.board[y][x].t === t) out.push({ x, y });
-    return t === COLOR ? [] : out;
+    return t < 0 ? [] : out;
   }
 
   function cellAt(e) {
@@ -861,24 +1040,28 @@ if (typeof document !== "undefined") {
   });
 
   // --- level overview ---
-  const grid = el("grid");
+
+  const grids = [el("grid"), el("grid2")];
 
   function buildGrid() {
-    grid.textContent = "";
     el("endless").className = state.endless ? "current" : "";
     el("endless").textContent = `\u221e Endless (best ${progress.endlessBest})`;
-    for (let n = 1; n <= MAX_LEVEL; n++) {
-      const cfg = levelConfig(n);
-      const b = document.createElement("button");
-      const locked = n > progress.unlocked;
-      b.className = "lvl" + (locked ? " locked" : "") + (n === state.level ? " current" : "");
-      b.disabled = locked;
-      b.title = `Level ${n}: ${cfg.target} points in ${cfg.moves} moves, ${cfg.types} colours` + (progress.best[n] ? ` (best ${progress.best[n]})` : "");
-      const stars = progress.stars[n] || 0;
-      b.innerHTML = `<b>${n}</b><span>${locked ? "\u{1F512}" : "\u2605".repeat(stars) + "\u2606".repeat(3 - stars)}</span>`;
-      b.addEventListener("click", () => { if (!busy) { startLevel(state, n); paused = false; togglePanel(false); newBoard(); } });
-      grid.appendChild(b);
-    }
+    grids.forEach((grid, w) => {
+      grid.textContent = "";
+      for (let n = w * WORLD_SIZE + 1; n <= (w + 1) * WORLD_SIZE; n++) {
+        const cfg = levelConfig(n);
+        const b = document.createElement("button");
+        const locked = n > progress.unlocked;
+        b.className = "lvl" + (locked ? " locked" : "") + (n === state.level && !state.endless ? " current" : "");
+        b.disabled = locked;
+        const extras = (cfg.layout.rocks.length ? `, ${cfg.layout.rocks.length} rocks` : "") + (cfg.layout.cages.length ? `, ${cfg.layout.cages.length} cages` : "");
+        b.title = `Level ${n}: ${cfg.target} points in ${cfg.moves} moves${extras}` + (progress.best[n] ? ` (best ${progress.best[n]})` : "");
+        const stars = progress.stars[n] || 0;
+        b.innerHTML = `<b>${n}</b><span>${locked ? "\u{1F512}" : "\u2605".repeat(stars) + "\u2606".repeat(3 - stars)}</span>`;
+        b.addEventListener("click", () => { if (!busy) { startLevel(state, n); paused = false; togglePanel(false); newBoard(); } });
+        grid.appendChild(b);
+      }
+    });
   }
 
   function togglePanel(open = !panelOpen) {
@@ -887,7 +1070,7 @@ if (typeof document !== "undefined") {
     armed = null;
     el("levels").hidden = !open;
     el("board").hidden = open;
-    if (open) { buildGrid(); const cur = grid.querySelector(".current"); if (cur && cur.focus) cur.focus(); }
+    if (open) { buildGrid(); const cur = grids[0].querySelector(".current") || grids[1].querySelector(".current"); if (cur && cur.focus) cur.focus(); }
   }
 
   el("endless").addEventListener("click", () => { if (!busy) { startEndless(state); paused = false; togglePanel(false); newBoard(); } });

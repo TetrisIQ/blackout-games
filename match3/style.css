@@ -46,7 +46,8 @@ button {
   cursor: pointer;
 }
 
-#grid {
+#grid,
+#grid2 {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   gap: 4px;

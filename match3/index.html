@@ -9,7 +9,7 @@
 <body>
   <main>
     <h1>Match 3</h1>
-    <p>Level <span id="level">1</span> · Moves <span id="moves">25</span> · Score <span id="score">0</span>/<span id="target">0</span> · Best <span id="best">0</span> · <button id="levels-btn" type="button">Levels (L)</button></p>
+    <p>Level <span id="level">1</span> · Moves <span id="moves">25</span> · Score <span id="score">0</span>/<span id="target">0</span><span id="cages-wrap" hidden> · Cages <span id="cages">0</span></span> · Best <span id="best">0</span> · <button id="levels-btn" type="button">Levels (L)</button></p>
     <div id="board">
       <canvas id="game" width="448" height="448"></canvas>
       <progress id="goal" max="1" value="0"></progress>
@@ -24,7 +24,10 @@
     <section id="levels" hidden>
       <h2>Levels</h2>
       <p><button id="endless" type="button">∞ Endless</button></p>
+      <h3>World 1 - Classic</h3>
       <div id="grid"></div>
+      <h3>World 2 - Walls &amp; Cages</h3>
+      <div id="grid2"></div>
       <p class="hint">Progress is saved in this browser. <button id="levels-close" type="button">Back to game (Esc)</button></p>
     </section>
   </main>

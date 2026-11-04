@@ -248,22 +248,47 @@ test("invariant: random play always leaves a full, stable, playable board", () =
   }
 });
 
-test("levelConfig: 100 levels, difficulty only ever grows", () => {
-  assert.equal(g.MAX_LEVEL, 100);
+test("levelConfig: world 1 has 100 levels, difficulty only ever grows", () => {
+  assert.equal(g.WORLD_SIZE, 100);
+  assert.equal(g.MAX_LEVEL, 200);
   let prev = g.levelConfig(1);
-  for (let n = 2; n <= g.MAX_LEVEL; n++) {
+  for (let n = 2; n <= g.WORLD_SIZE; n++) {
     const c = g.levelConfig(n);
     assert.equal(c.level, n);
     assert.ok(c.target >= prev.target, `target at ${n}`);
     assert.ok(c.moves <= prev.moves, `moves at ${n}`);
-    assert.ok(c.types >= prev.types, `types at ${n}`);
+    assert.deepEqual(c.layout, { rocks: [], cages: [] });
     prev = c;
   }
   assert.ok(prev.target > g.levelConfig(1).target);
   assert.ok(prev.moves < g.levelConfig(1).moves);
-  assert.ok(g.levelConfig(100).types <= g.TYPES);
   assert.equal(g.levelConfig(0).level, 1);
-  assert.equal(g.levelConfig(500).level, 100);
+  assert.equal(g.levelConfig(500).level, 200);
+});
+
+test("world 2: 100 levels with rocks and cages, valid boards, deterministic layouts", () => {
+  for (let n = 101; n <= 200; n++) {
+    const c = g.levelConfig(n);
+    assert.equal(c.level, n);
+    assert.deepEqual(c.layout, g.levelConfig(n).layout);
+    const rocks = new Set(c.layout.rocks.map(([x, y]) => y * g.W + x));
+    assert.ok(c.layout.rocks.length >= 4 && c.layout.rocks.length <= 20, `rocks at ${n}`);
+    assert.equal(rocks.size, c.layout.rocks.length);
+    assert.ok(c.layout.cages.length <= 20);
+    for (const [x, y, hp] of c.layout.cages) {
+      assert.ok(x >= 0 && x < g.W && y >= 0 && y < g.H);
+      assert.ok(!rocks.has(y * g.W + x), `cage on a rock at ${n}`);
+      assert.ok(hp === 1 || hp === 2);
+    }
+    const state = g.createState(mulberry32(n), n);
+    assert.equal(g.findGroups(state.board).length, 0, `matches at start of ${n}`);
+    assert.ok(g.findMove(state.board), `no move at ${n}`);
+    assert.equal(state.board.flat().filter((c2) => c2.t === g.ROCK).length, c.layout.rocks.length);
+    assert.equal(g.cagesLeft(state.board), c.layout.cages.length);
+  }
+  assert.equal(g.levelConfig(101).layout.cages.length, 0);
+  assert.ok(g.levelConfig(200).layout.cages.length >= 10);
+  assert.ok(g.levelConfig(200).layout.cages.length > g.levelConfig(120).layout.cages.length);
 });
 
 test("starsFor: more moves left means more stars", () => {
@@ -281,6 +306,19 @@ test("startLevel resets the level and uses its gem types", () => {
   assert.equal(state.score, 0);
   const t = new Set(g.createState(mulberry32(2), 1).board.flat().map((c) => c.t));
   assert.ok(t.size <= g.levelConfig(1).types);
+});
+
+test("a level needs its score AND all cages broken", () => {
+  const b = set(base(), [[0, 0, 4], [1, 0, 4], [2, 1, 4]]);
+  b[7][7].c = 2; // far away from the action
+  const state = stateWith(b);
+  state.score = state.target; // goal already reached
+  g.trySwap(state, { x: 2, y: 0 }, { x: 2, y: 1 });
+  assert.equal(state.status, "play");
+  state.board[7][7].c = 0; // cage gone: the next move clears the level
+  const [a2, b2] = g.findMove(state.board);
+  g.trySwap(state, a2, b2);
+  assert.equal(state.status, "levelclear");
 });
 
 test("last level cannot advance", () => {
@@ -438,4 +476,105 @@ test("powerup types are weighted: hammer > bomb > rainbow", () => {
   }
   assert.equal(g.pickPowerup(() => 0), "hammer");
   assert.equal(g.pickPowerup(() => 0.999999), "rainbow");
+});
+
+const rock = () => g.gem(g.ROCK, "rock");
+const cage = (b, x, y, hp) => { b[y][x].c = hp; return b; };
+
+test("rocks and caged gems cannot be swapped", () => {
+  const b = set(base(), [[0, 0, 4], [1, 0, 4], [2, 1, 4]]);
+  assert.equal(g.isValidSwap(b, { x: 2, y: 0 }, { x: 2, y: 1 }), true);
+  const r = g.cloneBoard(b);
+  r[0][2] = rock();
+  assert.equal(g.isValidSwap(r, { x: 2, y: 0 }, { x: 2, y: 1 }), false);
+  assert.equal(g.isValidSwap(cage(g.cloneBoard(b), 2, 1, 1), { x: 2, y: 0 }, { x: 2, y: 1 }), false);
+  assert.equal(g.isValidSwap(cage(g.cloneBoard(b), 2, 0, 1), { x: 2, y: 0 }, { x: 2, y: 1 }), false);
+});
+
+test("gravity works per segment: rocks stay and gems do not fall through them", () => {
+  const b = set(base(), [[0, 7, 3], [1, 7, 3], [2, 6, 3]]);
+  b[4][2] = rock();
+  const above = b[3][2].t;
+  const res = g.trySwap(stateWith(b), { x: 2, y: 6 }, { x: 2, y: 7 });
+  const board = res.steps[0].board;
+  assert.equal(res.valid, true);
+  assert.equal(board[4][2].t, g.ROCK);
+  assert.equal(board[3][2].t, above); // above the rock nothing moved
+  assert.equal(board[7][2].t, 4); // below the rock the segment closed up...
+  assert.equal(board[6][2].t, 0);
+  assert.ok(board[5][2].t >= 0 && board[5][2].t < g.TYPES); // ...and refilled from its own top
+});
+
+test("matches do not clear rocks; specials and powerups skip them too", () => {
+  const b = base();
+  b[2][2] = rock();
+  const state = endlessWith(b, { bomb: 1, hammer: 1 });
+  const res = g.usePowerup(state, "bomb", { x: 1, y: 1 });
+  const cleared = res.steps[0].cleared.map((p) => `${p.x},${p.y}`);
+  assert.equal(cleared.length, 8);
+  assert.ok(!cleared.includes("2,2"));
+  assert.equal(state.board[2][2].t, g.ROCK);
+  assert.equal(g.usePowerup(state, "hammer", { x: 2, y: 2 }).valid, false);
+});
+
+test("a cage takes a hit when a neighbour clears and breaks without clearing its gem", () => {
+  const b = cage(set(base(), [[0, 7, 3], [1, 7, 3], [2, 6, 3]]), 3, 7, 1);
+  const gemType = b[7][3].t;
+  const res = g.trySwap(stateWith(b), { x: 2, y: 6 }, { x: 2, y: 7 });
+  const step = res.steps[0];
+  assert.deepEqual(step.broken, [{ x: 3, y: 7 }]);
+  assert.ok(!step.cleared.some((p) => p.x === 3 && p.y === 7));
+  assert.equal(step.board[7][3].t, gemType);
+  assert.equal(step.board[7][3].c, 0);
+});
+
+test("a cage with two hits survives the first one", () => {
+  const b = cage(set(base(), [[0, 7, 3], [1, 7, 3], [2, 6, 3]]), 3, 7, 2);
+  const state = stateWith(b);
+  const res = g.trySwap(state, { x: 2, y: 6 }, { x: 2, y: 7 });
+  assert.deepEqual(res.steps[0].damaged, [{ x: 3, y: 7, c: 1 }]);
+  assert.deepEqual(res.steps[0].broken, []);
+  assert.equal(res.steps[0].board[7][3].c, 1);
+  assert.equal(g.cagesLeft(state.board) >= 1, true);
+});
+
+test("a caged gem that is part of the match is cleared when its cage breaks", () => {
+  const b = cage(set(base(), [[0, 7, 3], [1, 7, 3], [2, 6, 3]]), 1, 7, 1);
+  const res = g.trySwap(stateWith(b), { x: 2, y: 6 }, { x: 2, y: 7 });
+  const step = res.steps[0];
+  assert.deepEqual(step.broken, [{ x: 1, y: 7 }]);
+  assert.equal(step.cleared.length, 3);
+});
+
+test("shuffle keeps rocks and cages in place", () => {
+  const state = g.createState(mulberry32(5), 150);
+  const fixed = [];
+  state.board.forEach((row, y) => row.forEach((c, x) => { if (g.isFixed(c)) fixed.push([x, y, c.t, c.c]); }));
+  assert.ok(fixed.length > 0);
+  g.shuffle(state);
+  for (const [x, y, t, c] of fixed) {
+    assert.equal(state.board[y][x].t, t);
+    assert.equal(state.board[y][x].c, c);
+  }
+  assert.equal(g.findGroups(state.board).length, 0);
+  assert.ok(g.findMove(state.board));
+});
+
+test("invariant: random play on world 2 levels keeps boards full, stable and playable", () => {
+  for (const level of [101, 120, 150, 180, 200]) {
+    const rnd = mulberry32(level);
+    const state = g.createState(rnd, level);
+    for (let i = 0; i < 40 && state.status === "play"; i++) {
+      const moves = [];
+      for (let y = 0; y < g.H; y++) for (let x = 0; x < g.W; x++) for (const [dx, dy] of [[1, 0], [0, 1]]) {
+        if (x + dx < g.W && y + dy < g.H && g.isValidSwap(state.board, { x, y }, { x: x + dx, y: y + dy })) moves.push([{ x, y }, { x: x + dx, y: y + dy }]);
+      }
+      assert.ok(moves.length > 0);
+      const [a, b] = moves[Math.floor(rnd() * moves.length)];
+      assert.equal(g.trySwap(state, a, b).valid, true);
+      assert.ok(full(state.board));
+      assert.equal(g.findGroups(state.board).length, 0);
+      assert.ok(g.findMove(state.board));
+    }
+  }
 });
