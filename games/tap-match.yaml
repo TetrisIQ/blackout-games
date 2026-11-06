@@ -5,8 +5,8 @@ category: games
 type: files
 source:
   url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.0/tap-match.zip"
-sha256: 2ca0ab5d9b2df33d3000a6e5d79a092873f2b2a7f4b2e9cadef3740053b1f66c
-size_bytes: 43943
+sha256: f3effbb82ce52730e7848f5f1ab300e64de53e76d140290c19ae31d6acbdc2b2
+size_bytes: 55598
 license:
   spdx: "MIT"
 content:
