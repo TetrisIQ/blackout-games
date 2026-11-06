@@ -7,6 +7,7 @@ Katalog einfacher Spiele (Tetris, Snake, ...), mit Claude nachgebaut. Vanilla HT
 - `node --test <spiel>/test/*.test.js` - Logik-Tests eines Spiels (falls vorhanden)
 - `node tools/build-catalog.mjs --tag v0.0.0-test --out <dir>` - baut `<id>.zip` und den kit-Katalog (`<dir>/catalog`, prüfen mit `kit catalog check <dir>/catalog`); `<dir>` muss außerhalb des Repos liegen (Standard: Temp-Ordner)
 - `node tools/update-catalog.mjs --tag vX.Y.Z` - schreibt `catalog.yaml` und `games/<id>.yaml` ins Repo (vor jedem Release, siehe Regel 10); `kit catalog check .` prüft das Repo als lokalen Katalog
+- `node tools/build-site.mjs [--out <dir>] [--kit <dir>]` - baut die Spielebibliothek als GitHub-Pages-Seite (Hub aus `<kit>/assets/`, Standard `../kit`; `<dir>` außerhalb des Repos); `site/` hält nur die Icons und ist kein Spiel
 - `cd <spiel> && python -m http.server 8000` - Spiel lokal ansehen
 
 ## Rules

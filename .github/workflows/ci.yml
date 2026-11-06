@@ -24,6 +24,8 @@ jobs:
         with:
           repository: TetrisIQ/blackout-tool
           path: kit
+      - name: Build the Pages site
+        run: node tools/build-site.mjs --kit kit --out "$RUNNER_TEMP/site"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

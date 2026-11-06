@@ -12,6 +12,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 - `template/`: Kopiervorlage für neue Spiele, siehe [`docs/new-game.md`](docs/new-game.md).
 - `tools/check.mjs`: prüft alle Spiele (`node tools/check.mjs`).
 - `tools/build-catalog.mjs`: baut die Release-Pakete und den kit-Katalog.
+- `tools/build-site.mjs`, `site/`: baut die Spielebibliothek als statische Seite (GitHub Pages), siehe unten.
 - `catalog.yaml`, `games/<id>.yaml`: kit-Katalog (Metadaten und Manifeste, erzeugt von `tools/update-catalog.mjs`); das Repo ist damit selbst ein lokaler Katalog.
 
 ## Spiele
@@ -21,6 +22,14 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 | [snake](snake/) | Snake |
 | [match3](match3/) | Match 3 |
 | [tap-match](tap-match/) | Tap Match |
+
+## Spielebibliothek im Browser (GitHub Pages)
+Dieselbe Bibliothek wie im kit-Portal (`/games/`), mit allen Spielen spielbar und als App auf dem Handy installierbar (PWA, Spiele lassen sich offline speichern; GitHub Pages ist HTTPS). Der Hub (Vorlage, Service Worker, Manifest, CSS) kommt aus dem kit-Repo (`kit/assets/games/`, `kit/assets/portal/`), die Seite sieht also immer aus wie im Portal. Nur die Icons liegen in `site/`.
+
+    node tools/build-site.mjs --out /tmp/site        # --kit <ordner> falls kit nicht in ../kit liegt
+    cd /tmp/site && python -m http.server 8000
+
+Veröffentlicht wird bei jedem Push auf `main` (`.github/workflows/pages.yml`). Einmalig: Repo-Einstellungen -> Pages -> Source: **GitHub Actions**.
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.
