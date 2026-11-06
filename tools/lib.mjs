@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { createZip } from "./zip.mjs";
 
 export const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-// Folders that are not games. `games/` holds the kit manifests (see update-catalog.mjs).
-const SKIP = new Set(["docs", "tools", "node_modules", "dist", "games", "site"]);
+// Folders that are not games (`kit` is the kit checkout in CI). `games/` holds the kit manifests (see update-catalog.mjs).
+const SKIP = new Set(["docs", "tools", "node_modules", "dist", "games", "site", "kit"]);
 export const META_FILE = "game.yml"; // not .yaml: kit reads every *.yaml in a catalog folder as a manifest
 
 // Parses the flat subset used by game.yml: `key: value` and `key:` + `  - item` lists.
