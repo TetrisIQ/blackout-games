@@ -1,0 +1,14 @@
+id: tap-match
+name: "Tap Match"
+description: "Tap free tiles from a stacked board into a 7-slot tray; three equal tiles vanish. Clear the board before the tray overflows. 300 levels in 6 worlds with new tiles as you go."
+category: games
+type: files
+source:
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.0/tap-match.zip"
+sha256: 2ca0ab5d9b2df33d3000a6e5d79a092873f2b2a7f4b2e9cadef3740053b1f66c
+size_bytes: 43943
+license:
+  spdx: "MIT"
+content:
+  media: games
+  extract: zip
