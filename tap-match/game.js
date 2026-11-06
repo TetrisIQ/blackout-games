@@ -1,16 +1,29 @@
 // Tap Match: tap free tiles from a stacked board into a 7-slot tray; three equal tiles vanish.
 const GAME_ID = "tap-match";
-const TRAY = 7; // tray slots; a full tray without a match ends the level
-const W = 13; // board size in half-tile units (a tile is 2x2 units, upper layers sit offset by 1)
+const TRAY = 7; // tray slots; a full tray without a match ends the level ("+1" adds a slot for one level)
+const W = 13; // standard board size in half-tile units (a tile is 2x2 units, upper layers sit offset by 1)
 const H = 14;
 const TYPES = 18; // tile kinds; they are introduced one by one as the levels go on
 const WORLD_SIZE = 50;
 const WORLDS = 6;
 const LEVELS = WORLD_SIZE * WORLDS;
+// Difficulty sets how densely the board is packed (more tiles, more layers); Hard and Extreme also use a larger
+// board. The tile kinds stay the same. `w`/`h` are the board size in half-tile units, `max` caps the tile count.
+const DIFFICULTIES = [
+  { id: "easy", label: "Easy", tiles: 0.6, layers: -1, w: 13, h: 14, max: 120, text: "Airy boards with few tiles" },
+  { id: "medium", label: "Medium", tiles: 1, layers: 0, w: 13, h: 14, max: 120, text: "The standard board" },
+  { id: "hard", label: "Hard", tiles: 1.5, layers: 1, w: 15, h: 16, max: 170, text: "A larger board, packed with tiles" },
+  { id: "extreme", label: "Extreme", tiles: 2, layers: 2, w: 17, h: 18, max: 230, text: "A huge board with deep stacks" },
+];
+const difficultyOf = (id) => DIFFICULTIES.find((x) => x.id === id) || DIFFICULTIES[1];
 const WORLD_NAMES = ["Orchard", "Meadow", "Market", "Greenhouse", "Harvest", "Feast"];
-const UNDOS = 2;
-const SHUFFLES = 1;
-const HINTS = 1;
+// Powerups are only earned (series) and kept in a stock per difficulty that is never capped.
+const KINDS = ["undo", "hint", "shuffle", "slot"];
+// Every difficulty starts with this stock.
+const START_STOCK = { undo: 2, hint: 2, shuffle: 1, slot: 0 };
+const WEIGHTS = { undo: 40, hint: 30, shuffle: 15, slot: 15 }; // which powerup an award is: common to rare
+const SERIES = 3; // clean triples in a row that earn a chance at a powerup
+const AWARD_CHANCE = 0.5;
 
 // --- Logic (no DOM; testable with node) ---------------------------------
 
@@ -45,13 +58,14 @@ function isFree(tiles, tile) {
 
 // Harder levels: more tiles, more layers and more kinds of tiles. World 1 ramps up quickly (a new kind every
 // 5 levels), later worlds more slowly (every 10 levels until all kinds are in).
-function levelParams(level) {
+function levelParams(level, difficulty = "medium") {
   const types = level <= 50 ? 4 + Math.floor((level - 1) / 5) : 13 + Math.floor((level - 51) / 10);
   const count = level <= 50 ? 21 + level * 1.2 : 81 + (level - 50) * 0.1;
+  const d = difficultyOf(difficulty);
   return {
-    count: Math.min(105, Math.round(count)),
+    count: Math.min(d.max, Math.round(Math.min(105, count) * d.tiles)),
     types: Math.min(TYPES, types),
-    layers: Math.min(6, 2 + Math.floor(level / 20)),
+    layers: Math.max(2, Math.min(6, 2 + Math.floor(level / 20) + d.layers)),
   };
 }
 
@@ -73,9 +87,10 @@ function isUnlocked(level, cleared) {
 
 // The same level number always gives the same board. Types are dealt in triples while removing
 // free tiles one by one, so every board can be cleared (with an unlimited tray).
-function generateLevel(level) {
-  const random = mulberry32(level * 7919 + 13);
-  const { count, types, layers } = levelParams(level);
+function generateLevel(level, difficulty = "medium") {
+  const random = mulberry32(level * 7919 + 13 + DIFFICULTIES.findIndex((x) => x.id === difficulty) * 104729);
+  const { count, types, layers } = levelParams(level, difficulty);
+  const { w: W, h: H } = difficultyOf(difficulty);
   const spots = [];
   for (let z = 0; z < layers; z++) {
     const o = z % 2;
@@ -103,16 +118,27 @@ function generateLevel(level) {
   return tiles;
 }
 
-function createState(level = 1, random = Math.random, score = 0) {
+function emptyStock() {
+  return Object.fromEntries(KINDS.map((k) => [k, 0]));
+}
+
+function startStock() {
+  return { ...START_STOCK };
+}
+
+// `stock` = earned powerups carried over between levels (the object is shared and updated in place).
+function createState(level = 1, random = Math.random, score = 0, difficulty = "medium", stock = emptyStock()) {
   return {
+    stock,
+    cap: TRAY, // tray slots of this level
+    streak: 0, // clean triples in a row
+    picks: 0,
     level,
-    tiles: generateLevel(level),
+    difficulty,
+    tiles: generateLevel(level, difficulty),
     tray: [],
     score,
     startScore: score,
-    undos: UNDOS,
-    shuffles: SHUFFLES,
-    hints: HINTS,
     last: null,
     over: false,
     won: false,
@@ -127,7 +153,8 @@ function pick(state, id) {
   const at = state.tiles.findIndex((t) => t.id === id);
   if (at < 0 || !isFree(state.tiles, state.tiles[at])) return null;
   const tile = state.tiles[at];
-  state.last = { tile, tray: state.tray.slice(), score: state.score };
+  state.last = { tile, tray: state.tray.slice(), score: state.score, streak: state.streak, picks: state.picks };
+  tile.pickNo = ++state.picks;
   state.tiles.splice(at, 1);
   let index = state.tray.length;
   for (let i = state.tray.length - 1; i >= 0; i--) {
@@ -137,38 +164,83 @@ function pick(state, id) {
   const tray = state.tray.slice();
   const same = state.tray.filter((t) => t.type === tile.type);
   let matched = [];
+  const awards = [];
+  let clean = false;
   if (same.length >= 3) {
     matched = same.slice(0, 3);
     state.tray = state.tray.filter((t) => !matched.includes(t));
     state.score += 10;
+    // A clean triple: its three tiles were the last three picks, one right after the other.
+    clean = matched.every((t) => state.picks - t.pickNo < 3);
+    state.streak = clean ? state.streak + 1 : 0;
+    if (state.streak >= SERIES) {
+      state.streak = 0;
+      if (state.random() < AWARD_CHANCE) awards.push(award(state));
+    }
   }
   if (state.tiles.length === 0 && state.tray.length === 0) {
     state.won = true;
     state.score += 50;
-  } else if (state.tray.length >= TRAY) {
+  } else if (state.tray.length >= state.cap) {
     state.over = true;
   }
-  return { tile, index, tray, matched };
+  return { tile, index, tray, matched, clean, awards };
+}
+
+// Weighted random powerup kind (see WEIGHTS).
+function pickPowerup(random) {
+  let r = random() * KINDS.reduce((sum, k) => sum + WEIGHTS[k], 0);
+  for (const k of KINDS) {
+    r -= WEIGHTS[k];
+    if (r < 0) return k;
+  }
+  return KINDS[KINDS.length - 1];
+}
+
+function award(state) {
+  const kind = pickPowerup(state.random);
+  state.stock[kind]++;
+  return kind;
+}
+
+// How many of a powerup are in the stock.
+function available(state, kind) {
+  return state.stock[kind] || 0;
+}
+
+function spend(state, kind) {
+  state.stock[kind]--;
+}
+
+// "+1": one more tray slot for the rest of the level (once per level; can also rescue a full tray).
+function addSlot(state) {
+  if (state.won || state.cap > TRAY || available(state, "slot") <= 0) return false;
+  state.cap++;
+  state.over = state.tray.length >= state.cap;
+  spend(state, "slot");
+  return true;
 }
 
 // Takes back the last pick (also after a lost level). Returns false when none is left.
 function undo(state) {
-  if (!state.last || state.undos <= 0 || state.won) return false;
+  if (!state.last || state.won || available(state, "undo") <= 0) return false;
   state.tiles.push(state.last.tile);
   state.tray = state.last.tray;
   state.score = state.last.score;
+  state.streak = state.last.streak;
+  state.picks = state.last.picks;
   state.last = null;
-  state.over = false;
-  state.undos--;
+  state.over = state.tray.length >= state.cap;
+  spend(state, "undo");
   return true;
 }
 
 // Deals the types of the remaining board tiles anew.
 function shuffleBoard(state) {
-  if (state.shuffles <= 0 || state.over || state.won || state.tiles.length < 2) return false;
+  if (available(state, "shuffle") <= 0 || state.over || state.won || state.tiles.length < 2) return false;
   const types = shuffled(state.tiles.map((t) => t.type), state.random);
   state.tiles.forEach((t, i) => { t.type = types[i]; });
-  state.shuffles--;
+  spend(state, "shuffle");
   state.last = null;
   return true;
 }
@@ -188,14 +260,14 @@ function bestMove(state) {
 
 // Uses up a hint and returns the suggested tile (null when none is left or the level is over).
 function hint(state) {
-  if (state.hints <= 0 || state.over || state.won) return null;
+  if (available(state, "hint") <= 0 || state.over || state.won) return null;
   const tile = bestMove(state);
-  if (tile) state.hints--;
+  if (tile) spend(state, "hint");
   return tile;
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { createState, generateLevel, levelParams, pick, undo, shuffleBoard, hint, bestMove, tileUnlockLevel, worldOf, isUnlocked, WORLD_SIZE, WORLDS, LEVELS, WORLD_NAMES, isFree, covers, TRAY, W, H, TYPES, UNDOS, SHUFFLES, HINTS };
+  module.exports = { createState, generateLevel, levelParams, pick, undo, addSlot, shuffleBoard, hint, startStock, START_STOCK, bestMove, available, pickPowerup, emptyStock, KINDS, WEIGHTS, SERIES, AWARD_CHANCE, tileUnlockLevel, worldOf, isUnlocked, WORLD_SIZE, WORLDS, LEVELS, WORLD_NAMES, DIFFICULTIES, difficultyOf, isFree, covers, TRAY, W, H, TYPES };
 }
 
 // --- Browser: input, rendering, loop ------------------------------------
@@ -228,16 +300,30 @@ if (typeof document !== "undefined") {
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
-  const LW = 414; // logical canvas size; the backing store is scaled to the displayed size
-  const LH = 566;
+  let LW = 414; // logical canvas size (set per difficulty); the backing store is scaled to the displayed size
+  let LH = 566;
   const U = 30; // px per board unit
   const OY = 14; // board top margin
   const OX = 12; // board side margin
   const TS = 2 * U; // tile size on the board
-  const SLOT = 50; // tray slot size
+  const SLOT_MAX = 50; // tray slot size (smaller when "+1" adds a slot)
+  let SLOT = SLOT_MAX;
   const SLOT_GAP = 6;
-  const TRAY_X = 14;
-  const TRAY_Y = 490;
+  let TRAY_X = 14;
+  let TRAY_Y = 490;
+  // The canvas fits the board of the chosen difficulty: board, then the tray centred below it.
+  function layout(id) {
+    const d = difficultyOf(id);
+    LW = 2 * OX + d.w * U;
+    TRAY_Y = OY + d.h * U + 56;
+    LH = TRAY_Y + SLOT_MAX + 26;
+    canvas.style.setProperty("--ar", (LW / LH).toFixed(4));
+  }
+  function trayLayout() {
+    const n = state.cap;
+    SLOT = Math.min(SLOT_MAX, (LW - 28 - SLOT_GAP * (n - 1)) / n);
+    TRAY_X = (LW - (n * SLOT + (n - 1) * SLOT_GAP)) / 2;
+  }
   const FLY = 170;
   const POP = 260;
   const el = (id) => document.getElementById(id);
@@ -247,8 +333,11 @@ if (typeof document !== "undefined") {
   const undoBtn = el("btn-undo");
   const shuffleBtn = el("btn-shuffle");
   const hintBtn = el("btn-hint");
-  const scoresKey = `${GAME_ID}:scores`; // best score per level
-  const clearedKey = `${GAME_ID}:cleared`; // list of cleared levels
+  const slotBtn = el("btn-slot");
+  const diffKey = `${GAME_ID}:difficulty`; // last chosen difficulty
+  const stockKey = (d) => `${GAME_ID}:stock-${d}`; // earned powerups per difficulty (never capped)
+  const clearedKey = (d) => `${GAME_ID}:cleared-${d}`; // cleared levels per difficulty
+  const scoresKey = (d) => `${GAME_ID}:scores-${d}`; // best score per level per difficulty
   const helpKey = `${GAME_ID}:help`;
 
   function load(key, fallback) {
@@ -257,9 +346,21 @@ if (typeof document !== "undefined") {
   function save(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage blocked */ }
   }
-  const cleared = new Set((load(clearedKey, []) || []).filter(Number.isInteger));
-  const scores = load(scoresKey, {}) || {};
-  let state = createState(1);
+  const loadCleared = (d) => new Set((load(clearedKey(d), []) || []).filter(Number.isInteger));
+  const diffInfo = (d) => DIFFICULTIES.find((x) => x.id === d) || DIFFICULTIES[1];
+  let difficulty = diffInfo(load(diffKey, "medium")).id;
+  let cleared = loadCleared(difficulty);
+  let scores = load(scoresKey(difficulty), {}) || {};
+  const stock = emptyStock();
+  // `stock` is shared with the running level; switching the difficulty swaps its content.
+  function loadStock(d) {
+    const saved = load(stockKey(d), null) || startStock(); // a difficulty without a saved stock starts with the start stock
+    for (const k of KINDS) stock[k] = Math.max(0, Math.floor(Number(saved[k])) || 0);
+  }
+  loadStock(difficulty);
+  const saveStock = () => save(stockKey(difficulty), stock);
+  const LABELS = { undo: "Undo", hint: "Hint", shuffle: "Shuffle", slot: "+1" };
+  let state = createState(1, undefined, 0, difficulty, stock);
   let inMenu = true;
   let menuWorld = 1;
   let toastType = null; // new tile kind announced above the board until the first move
@@ -425,6 +526,7 @@ if (typeof document !== "undefined") {
   function draw(now = performance.now()) {
     ctx.setTransform(canvas.width / LW, 0, 0, canvas.height / LH, 0, 0);
     ctx.clearRect(0, 0, LW, LH);
+    trayLayout();
     const order = state.tiles.slice().sort((a, b) => a.z - b.z);
     for (const t of order) {
       let dx = 0;
@@ -444,8 +546,8 @@ if (typeof document !== "undefined") {
     }
     // tray
     ctx.fillStyle = PAL.surface;
-    roundRect(4, TRAY_Y - 8, LW - 8, SLOT + 16, 10); ctx.fill();
-    for (let i = 0; i < TRAY; i++) {
+    roundRect(4, TRAY_Y - 8, LW - 8, SLOT_MAX + 16, 10); ctx.fill();
+    for (let i = 0; i < state.cap; i++) {
       ctx.fillStyle = PAL["cell-b"];
       roundRect(slotX(i), TRAY_Y, SLOT, SLOT, 8); ctx.fill();
     }
@@ -469,16 +571,19 @@ if (typeof document !== "undefined") {
       return true;
     });
     // hud
-    levelEl.textContent = state.level;
+    levelEl.textContent = `${state.level} (${diffInfo(state.difficulty).label})`;
     scoreEl.textContent = state.score;
     bestEl.textContent = Math.max(scores[state.level] || 0, state.score);
-    undoBtn.textContent = `Undo (${state.undos})`;
-    undoBtn.disabled = !state.last || state.undos <= 0 || state.won;
-    shuffleBtn.textContent = `Shuffle (${state.shuffles})`;
-    hintBtn.textContent = `Hint (${state.hints})`;
-    hintBtn.disabled = state.hints <= 0 || state.over || state.won;
-    shuffleBtn.disabled = state.shuffles <= 0 || state.over || state.won;
-    if (state.won) overlay(`Level ${state.level} cleared!`, state.level >= LEVELS ? "All levels done! Tap for the overview" : "Tap or Enter: next level");
+    const left = { undo: undoBtn, hint: hintBtn, shuffle: shuffleBtn, slot: slotBtn };
+    for (const k of KINDS) left[k].textContent = `${LABELS[k]} (${available(state, k)})`;
+    undoBtn.disabled = !state.last || available(state, "undo") <= 0 || state.won;
+    hintBtn.disabled = available(state, "hint") <= 0 || state.over || state.won;
+    shuffleBtn.disabled = available(state, "shuffle") <= 0 || state.over || state.won;
+    slotBtn.disabled = available(state, "slot") <= 0 || state.cap > TRAY || state.won;
+    el("series").textContent = `Series ${"\u25CF".repeat(state.streak)}${"\u25CB".repeat(SERIES - state.streak)}`;
+    if (state.won) {
+      overlay(`Level ${state.level} cleared!`, state.level >= LEVELS ? "All levels done! Tap for the overview" : "Tap or Enter: next level");
+    }
     else if (state.over) overlay("Tray full", "Tap or R: retry · U: undo");
     else if (paused) overlay("Paused", "P or tap to continue");
   }
@@ -486,7 +591,7 @@ if (typeof document !== "undefined") {
   function saveBest() {
     if (state.score > (scores[state.level] || 0)) {
       scores[state.level] = state.score;
-      save(scoresKey, scores);
+      save(scoresKey(difficulty), scores);
     }
   }
 
@@ -507,22 +612,40 @@ if (typeof document !== "undefined") {
 
   function showToast(type) {
     toastType = type;
-    const t = el("toast");
+    const t = el("toast-text");
     t.textContent = "";
     if (type !== null) t.append("New tile: ", tileIcon(type));
   }
 
+  // A short message above the board; the buttons of earned powerups pop.
+  let sayTimer = 0;
+  function say(text) {
+    const t = el("toast-text");
+    t.textContent = text;
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => { if (toastType === null) t.textContent = ""; }, 2600);
+  }
+
+  function flash(kind) {
+    const b = { undo: undoBtn, hint: hintBtn, shuffle: shuffleBtn, slot: slotBtn }[kind];
+    b.classList.remove("earned");
+    void b.offsetWidth;
+    b.classList.add("earned");
+    setTimeout(() => b.classList.remove("earned"), 1500);
+  }
+
   function begin(level) {
-    state = createState(level);
+    state = createState(level, undefined, 0, difficulty, stock);
     fx = [];
     denied = null;
     hintId = null;
     paused = false;
     inMenu = false;
+    layout(difficulty);
     el("menu").hidden = true;
     el("play").hidden = false;
-    const types = levelParams(level).types;
-    showToast(level > 1 && types > levelParams(level - 1).types ? types - 1 : null);
+    const types = levelParams(level, difficulty).types;
+    showToast(level > 1 && types > levelParams(level - 1, difficulty).types ? types - 1 : null);
     resize();
   }
 
@@ -578,9 +701,50 @@ if (typeof document !== "undefined") {
     paused = false;
     menuWorld = worldOf(level).world;
     el("play").hidden = true;
+    el("diff").hidden = true;
     el("menu").hidden = false;
+    el("diff-name").textContent = diffInfo(difficulty).label;
+    el("stock").textContent = KINDS.map((k) => `${LABELS[k]} ${stock[k]}`).join(" \u00B7 ");
     buildMenu();
   }
+
+  // --- Difficulty: asked before the levels are shown; every difficulty keeps its own progress ---
+  function chooseDifficulty(id) {
+    difficulty = id;
+    cleared = loadCleared(id);
+    scores = load(scoresKey(id), {}) || {};
+    loadStock(id);
+    save(diffKey, id);
+    showMenu();
+  }
+
+  function showDifficulty() {
+    inMenu = true;
+    paused = false;
+    el("play").hidden = true;
+    el("menu").hidden = true;
+    el("diff").hidden = false;
+    const list = el("diff-list");
+    list.textContent = "";
+    for (const d of DIFFICULTIES) {
+      const done = loadCleared(d.id).size;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "diffbtn";
+      if (d.id === difficulty) b.classList.add("current");
+      const name = document.createElement("b");
+      name.textContent = d.label;
+      const text = document.createElement("span");
+      text.textContent = d.text;
+      const prog = document.createElement("small");
+      prog.textContent = done >= LEVELS ? "All worlds cleared" : `${done}/${LEVELS} levels cleared`;
+      b.append(name, text, prog);
+      b.addEventListener("click", () => chooseDifficulty(d.id));
+      list.append(b);
+    }
+  }
+
+  el("btn-diff").addEventListener("click", showDifficulty);
 
   el("w-prev").addEventListener("click", () => { menuWorld = Math.max(1, menuWorld - 1); buildMenu(); });
   el("w-next").addEventListener("click", () => { menuWorld = Math.min(WORLDS, menuWorld + 1); buildMenu(); });
@@ -605,7 +769,9 @@ if (typeof document !== "undefined") {
       if (m !== res.tile) fx.push({ tile: m, from: null, slot: res.tray.indexOf(m), t0: now, pop: true });
     }
     saveBest();
-    if (state.won) { cleared.add(state.level); save(clearedKey, [...cleared]); }
+    for (const k of res.awards) { flash(k); say(`Series! Powerup earned: ${LABELS[k]}`); }
+    if (state.won) { cleared.add(state.level); save(clearedKey(difficulty), [...cleared]); }
+    saveStock();
   }
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -614,18 +780,20 @@ if (typeof document !== "undefined") {
     onTap((e.clientX - r.left) * LW / r.width, (e.clientY - r.top) * LH / r.height);
   });
 
-  function doUndo() { if (!paused && undo(state)) { fx = []; hintId = null; } }
-  function doShuffle() { if (!paused && shuffleBoard(state)) hintId = null; }
+  function doUndo() { if (!paused && undo(state)) { fx = []; hintId = null; saveStock(); } }
+  function doShuffle() { if (!paused && shuffleBoard(state)) { hintId = null; saveStock(); } }
+  function doSlot() { if (!paused && addSlot(state)) saveStock(); }
   function doHint() {
     if (paused) return;
     const t = hint(state);
-    if (t) hintId = t.id;
+    if (t) { hintId = t.id; saveStock(); }
   }
   function togglePause() { if (!state.over && !state.won) paused = !paused; }
 
   undoBtn.addEventListener("click", doUndo);
   shuffleBtn.addEventListener("click", doShuffle);
   hintBtn.addEventListener("click", doHint);
+  slotBtn.addEventListener("click", doSlot);
   el("btn-pause").addEventListener("click", togglePause);
   el("btn-restart").addEventListener("click", retry);
   document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over && !state.won) paused = true; });
@@ -648,12 +816,14 @@ if (typeof document !== "undefined") {
     },
     {
       title: "Worlds and levels",
-      html: `<p>The levels are grouped in <b>worlds of 50</b>. A level opens once you have cleared the one before it, and the <b>first level of every world is always open</b>, so you can jump ahead.</p>
+      html: `<p>First pick a <b>difficulty</b>: it decides how densely the board is packed with tiles, not which tiles appear. Each difficulty keeps its own progress.</p>
+        <p>The levels are grouped in <b>worlds of 50</b>. A level opens once you have cleared the one before it, and the <b>first level of every world is always open</b>, so you can jump ahead.</p>
         <p>Levels get harder: more tiles, more layers and <b>new kinds of tiles</b> every few levels. A new tile is announced above the board. <kbd>L</kbd> or <kbd>Esc</kbd> opens the level overview.</p>`,
     },
     {
       title: "Helpers and controls",
-      html: `<p><b>Undo</b> (<kbd>U</kbd>) takes back your last tile, also after a lost level (2 per level). <b>Shuffle</b> (<kbd>S</kbd>) deals the remaining board tiles anew (1 per level). <b>Hint</b> (<kbd>H</kbd>) makes a good tile glow (1 per level).</p>
+      html: `<p><b>Undo</b> (<kbd>U</kbd>) takes back your last tile, also after a lost level. <b>Shuffle</b> (<kbd>S</kbd>) deals the remaining board tiles anew. <b>Hint</b> (<kbd>H</kbd>) makes a good tile glow. <b>+1</b> (<kbd>+</kbd>) adds a tray slot for the rest of the level (once per level, also works when the tray is full). Every difficulty starts with 2 Undo, 2 Hint and 1 Shuffle.</p>
+        <p><b>Earn more:</b> take three equal tiles <b>one right after the other</b> (a clean triple). Three clean triples in a row (Series) give a 50 % chance of a powerup. Earned powerups are kept per difficulty and have no limit.</p>
         <p><kbd>P</kbd> pauses, <kbd>R</kbd> retries the level, <kbd>?</kbd> shows this guide. Tap or click tiles with the mouse or your finger.</p>
         <p>The game pauses when you leave the page.</p>`,
     },
@@ -714,6 +884,7 @@ if (typeof document !== "undefined") {
     else if (key === "u") doUndo();
     else if (key === "s") doShuffle();
     else if (key === "h") doHint();
+    else if (key === "+" || key === "=") doSlot();
     else if (key === "Enter" && state.won) nextLevel();
     else return;
     e.preventDefault();
@@ -738,6 +909,6 @@ if (typeof document !== "undefined") {
     requestAnimationFrame(frame);
   }
   try { if (localStorage.getItem(helpKey) !== "1") showHelp(); } catch (e) { showHelp(); } // first visit
-  showMenu();
+  showDifficulty();
   requestAnimationFrame(frame);
 }

@@ -131,11 +131,11 @@ button:disabled {
 
 /* As large as the window allows, always with some margin around it. */
 #game {
-  width: min(100vw - 40px, calc((100vh - 310px) * 0.73));
-  width: min(100vw - 40px, calc((100dvh - 310px) * 0.73));
+  width: min(100vw - 40px, calc((100vh - 310px) * var(--ar, 0.73)));
+  width: min(100vw - 40px, calc((100dvh - 310px) * var(--ar, 0.73)));
   min-width: 260px;
   height: auto;
-  aspect-ratio: 414 / 566;
+  aspect-ratio: var(--ar, 0.73);
 }
 
 .bar {
@@ -279,7 +279,7 @@ button:disabled {
   margin: 0 auto;
 }
 
-#play[hidden], #menu[hidden] {
+#play[hidden], #menu[hidden], #diff[hidden] {
   display: none;
 }
 
@@ -365,11 +365,71 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 14px;
   color: var(--accent);
   font-size: 0.95rem;
 }
 
 .bar .touch-only {
   gap: 8px;
+}
+
+/* Difficulty choice */
+#diff {
+  width: min(100vw - 40px, 420px);
+  margin: 0 auto;
+}
+
+#diff h2 {
+  margin: 0.4rem 0;
+  font-size: 1.25rem;
+}
+
+.diff-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.diffbtn {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 14px;
+  min-height: 64px;
+}
+
+.diffbtn b {
+  font-size: 1.1rem;
+}
+
+.diffbtn small {
+  color: var(--muted);
+}
+
+.diffbtn.current {
+  border-color: var(--accent);
+}
+
+.series {
+  color: var(--muted);
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
+button.earned {
+  animation: earned 1.4s ease-out;
+}
+
+@keyframes earned {
+  0%, 100% { transform: scale(1); box-shadow: none; }
+  25% { transform: scale(1.18); border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  60% { transform: scale(1.06); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.earned {
+    animation: none;
+    border-color: var(--accent);
+  }
 }

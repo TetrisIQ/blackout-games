@@ -10,7 +10,14 @@
 <body>
   <main>
     <h1>Tap Match</h1>
-    <section id="menu">
+    <section id="diff" hidden>
+      <h2>Choose a difficulty</h2>
+      <p class="hint">The difficulty sets how densely the boards are packed. Every difficulty has its own progress.</p>
+      <div id="diff-list" class="diff-list"></div>
+    </section>
+    <section id="menu" hidden>
+      <p class="hint">Difficulty: <b id="diff-name"></b> <button id="btn-diff" type="button">Change</button></p>
+      <p class="hint">Powerups: <span id="stock"></span></p>
       <div class="worldbar">
         <button id="w-prev" type="button" aria-label="Previous world">&lsaquo;</button>
         <div>
@@ -24,12 +31,13 @@
     </section>
     <section id="play" hidden>
       <p>Level <span id="level">1</span> · Score: <span id="score">0</span> · Best: <span id="best">0</span></p>
-      <div id="toast" class="toast"></div>
+      <div id="toast" class="toast"><span id="toast-text"></span><span id="series" class="series"></span></div>
       <canvas id="game" width="414" height="566"></canvas>
       <div class="bar">
         <button id="btn-undo" type="button">Undo</button>
         <button id="btn-hint" type="button">Hint</button>
         <button id="btn-shuffle" type="button">Shuffle</button>
+        <button id="btn-slot" type="button">+1</button>
       </div>
       <div class="bar">
         <button id="btn-levels" type="button">Levels</button>
@@ -38,7 +46,7 @@
           <button id="btn-restart" type="button">Restart</button>
         </span>
       </div>
-      <p class="hint kbd-hint">Click a free tile · U undo · H hint · S shuffle · P pause · R restart · L levels · ? how to play</p>
+      <p class="hint kbd-hint">Click a free tile · U undo · H hint · S shuffle · + extra slot · P pause · R restart · L levels · ? how to play</p>
     </section>
     <p><button id="btn-help" type="button">How to play</button></p>
   </main>
