@@ -5,8 +5,8 @@ category: games
 type: files
 source:
   url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.1.2/snake.zip"
-sha256: 53c5312861b72697c00bc94ee92eb5ad1d6e4672c57bb56a6c7c349ce89303b0
-size_bytes: 14422
+sha256: c9c99b166bbc2a63ffeff6e882af2d2d2cc74e749d2c5c409000e2a794b31f96
+size_bytes: 20933
 license:
   spdx: "MIT"
 content:

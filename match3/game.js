@@ -891,11 +891,17 @@ if (typeof document !== "undefined") {
     else if (paused) overlay("Paused");
   }
 
+  const LOW_MOVES = 5;
+
   function hud() {
     shownScore += (targetScore - shownScore) * 0.2;
     if (Math.abs(targetScore - shownScore) < 1) shownScore = targetScore;
     el("level").textContent = state.endless ? "\u221e" : state.level;
     el("moves").textContent = state.endless ? "\u221e" : state.movesLeft;
+    // Last moves: pulse the counter and the board so the end is not a surprise.
+    const low = !state.endless && state.status === "play" && state.movesLeft > 0 && state.movesLeft <= LOW_MOVES;
+    el("moves").classList.toggle("low", low);
+    el("board").classList.toggle("low", low);
     el("score").textContent = Math.round(shownScore);
     el("target").textContent = state.endless ? "\u221e" : state.target;
     el("best").textContent = (state.endless ? progress.endlessBest : progress.best[state.level]) || 0;

@@ -5,8 +5,8 @@ category: games
 type: files
 source:
   url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.1.2/match3.zip"
-sha256: c1a6bcab96dacb0d1ece39d617571cb8945b1e8e46b3e3b665d6613479e8c3d8
-size_bytes: 83246
+sha256: d7856b9bb2efa0962b2d09f2929d845b7c6b60659e4c606d3d526c8ddd0f1783
+size_bytes: 84202
 license:
   spdx: "MIT"
 content:

@@ -346,3 +346,29 @@ progress {
   border-color: var(--accent);
   flex: 1;
 }
+
+/* Five moves or fewer left: pulse the counter and glow around the board. */
+#moves.low {
+  color: var(--accent);
+  display: inline-block;
+  animation: low-pulse 0.9s ease-in-out infinite;
+}
+
+#board.low canvas {
+  animation: low-glow 0.9s ease-in-out infinite;
+}
+
+@keyframes low-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+}
+
+@keyframes low-glow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 16px 3px var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #moves.low, #board.low canvas { animation: none; }
+  #board.low canvas { box-shadow: 0 0 10px 2px var(--accent); }
+}
