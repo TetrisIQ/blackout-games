@@ -17,6 +17,9 @@ Klassisches Falling-Blocks-Puzzle auf einem 10×20 Feld.
 - Das Spiel endet, wenn ein neuer Stein nicht mehr passt.
 - Highscore wird in `localStorage` (`tetris:best`) gespeichert.
 
+## Anleitung
+Beim ersten Öffnen erscheint eine kurze Anleitung (3 Seiten: Ziel, Regeln/Punkte, Steuerung). Das Spiel wartet solange. „Skip“, Esc oder „Let's play“ schließen sie; danach kommt sie nicht mehr von allein (`localStorage`, Schlüssel `tetris:help`). Erneut aufrufen: Button „How to play“ oder die Taste `?`; Pfeiltasten blättern.
+
 ## Darstellung
 Folgt dem hellen/dunklen Theme von kit (`data-theme`, `kit-theme`, sonst Systemeinstellung); skaliert auf Handy-Displays und pausiert, wenn die Seite in den Hintergrund geht.
 

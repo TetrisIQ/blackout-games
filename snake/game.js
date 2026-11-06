@@ -117,6 +117,83 @@ if (typeof document !== "undefined") {
 
   let state = createState();
   let paused = false;
+
+  // --- How to play: shown on the first visit, then from the button or with "?" ---
+  const helpKey = `${GAME_ID}:help`;
+  const helpEl = (id) => document.getElementById(id);
+  const demo = (html) => `<p class="demo">${html}</p>`;
+  const sq = (cls, ch = "&#9632;") => `<span class="${cls}">${ch}</span>`;
+  const HELP = [
+    {
+      title: "Eat and grow",
+      html: `<p>Steer the snake to the <b>red food</b>. Every piece is worth <b>10 points</b>, makes the snake <b>longer</b> and the game a little <b>faster</b>.</p>
+        ${demo(`${sq("snake-body")}${sq("snake-body")}${sq("snake-body")}${sq("snake-head", "&#9654;")} <small>eat</small> ${sq("food")}`)}
+        <p>Your best score is saved in this browser.</p>`,
+    },
+    {
+      title: "Stay alive",
+      html: `<p>The game ends when you hit a <b>wall</b> or your <b>own tail</b>. You cannot turn around on the spot, but quick turns are remembered, so you can steer two corners in a row.</p>
+        ${demo(`${sq("snake-body")}${sq("snake-body")}${sq("snake-head", "&#9654;")} <small>crash</small> ${sq("wall", "&#9646;")}`)}
+        <p>Fill the whole board and you win.</p>`,
+    },
+    {
+      title: "Controls",
+      html: `<p><b>Keyboard:</b> <kbd>&uarr;</kbd> <kbd>&larr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd> or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> steer, <kbd>P</kbd> pauses, <kbd>R</kbd> restarts, <kbd>?</kbd> shows this guide.</p>
+        <p><b>Touch:</b> swipe on the board or use the arrow buttons. Tap the board after a game over to play again.</p>
+        <p>The game pauses when you leave the page.</p>`,
+    },
+  ];
+  let helpOpen = false;
+  let helpIndex = 0;
+  let pausedByHelp = false;
+
+  function helpPage(i) {
+    helpIndex = Math.min(HELP.length - 1, Math.max(0, i));
+    const page = HELP[helpIndex];
+    helpEl("help-title").textContent = page.title;
+    helpEl("help-body").innerHTML = page.html;
+    helpEl("help-dots").innerHTML = HELP.map((_, k) => (k === helpIndex ? "<b>&#9679;</b>" : "&#9675;")).join("");
+    helpEl("help-back").disabled = helpIndex === 0;
+    helpEl("help-next").textContent = helpIndex === HELP.length - 1 ? "Let's play" : "Next";
+  }
+
+  function showHelp() {
+    if (helpOpen) return;
+    helpOpen = true;
+    pausedByHelp = !paused; // the game waits behind the guide
+    paused = true;
+    helpPage(0);
+    helpEl("help").hidden = false;
+  }
+
+  function helpNext() {
+    if (helpIndex >= HELP.length - 1) closeHelp();
+    else helpPage(helpIndex + 1);
+  }
+
+  function closeHelp() {
+    helpOpen = false;
+    helpEl("help").hidden = true;
+    if (pausedByHelp) paused = false;
+    try { localStorage.setItem(helpKey, "1"); } catch (e) { /* storage blocked */ }
+  }
+
+  // Returns true when the key was used by the guide.
+  function helpHandleKey(e, key) {
+    if (key === "?" ) { showHelp(); e.preventDefault(); return true; }
+    if (!helpOpen) return false;
+    if (key === "Escape") closeHelp();
+    else if (key === "ArrowRight" || key === "Enter" || key === " ") { if (e.target && e.target.tagName === "BUTTON") return true; helpNext(); }
+    else if (key === "ArrowLeft") helpPage(helpIndex - 1);
+    e.preventDefault();
+    return true;
+  }
+
+  helpEl("btn-help").addEventListener("click", showHelp);
+  helpEl("help-back").addEventListener("click", () => helpPage(helpIndex - 1));
+  helpEl("help-next").addEventListener("click", helpNext);
+  helpEl("help-close").addEventListener("click", closeHelp);
+
   let best = Number(localStorage.getItem(bestKey) || 0);
   let acc = 0;
   let last = performance.now();
@@ -175,6 +252,7 @@ if (typeof document !== "undefined") {
 
   document.addEventListener("keydown", (e) => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (helpHandleKey(e, key)) return;
     if (key === "r") restart();
     else if (key === "p") togglePause();
     else if (keys[key] && !paused && !state.over) setDir(state, keys[key]);
@@ -226,5 +304,6 @@ if (typeof document !== "undefined") {
     draw();
     requestAnimationFrame(frame);
   }
+  try { if (localStorage.getItem(helpKey) !== "1") showHelp(); } catch (e) { showHelp(); } // first visit
   requestAnimationFrame(frame);
 }

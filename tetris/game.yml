@@ -11,4 +11,5 @@ controls:
   - "Space: hard drop"
   - "P: pause"
   - "R: restart"
+  - "?: how to play"
   - "Touch: on-screen buttons"

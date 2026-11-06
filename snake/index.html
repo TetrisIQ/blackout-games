@@ -22,9 +22,22 @@
       <button data-dir="down" type="button" aria-label="Down">&darr;</button>
       <button data-dir="right" type="button" aria-label="Right">&rarr;</button>
     </div>
-    <p class="hint kbd-hint">Arrows/WASD steer · P pause · R restart</p>
+    <p class="hint kbd-hint">Arrows/WASD steer · P pause · R restart · ? how to play</p>
+    <p><button id="btn-help" type="button">How to play</button></p>
     <p class="hint touch-only">Swipe or use the arrows · tap the board after game over</p>
   </main>
+  <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title"></h2>
+      <div id="help-body"></div>
+      <p id="help-dots" class="dots"></p>
+      <p class="nav">
+        <button id="help-back" type="button">Back</button>
+        <button id="help-next" type="button">Next</button>
+        <button id="help-close" type="button">Skip</button>
+      </p>
+    </div>
+  </div>
   <script src="game.js"></script>
 </body>
 </html>

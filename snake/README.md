@@ -15,6 +15,9 @@ Steuere eine wachsende Schlange über ein 20×20 Feld.
 - Füllt die Schlange das ganze Feld, ist das Spiel gewonnen.
 - Highscore wird in `localStorage` (`snake:best`) gespeichert.
 
+## Anleitung
+Beim ersten Öffnen erscheint eine kurze Anleitung (3 Seiten: Ziel, Regeln/Punkte, Steuerung). Das Spiel wartet solange. „Skip“, Esc oder „Let's play“ schließen sie; danach kommt sie nicht mehr von allein (`localStorage`, Schlüssel `snake:help`). Erneut aufrufen: Button „How to play“ oder die Taste `?`; Pfeiltasten blättern.
+
 ## Darstellung
 Folgt dem hellen/dunklen Theme von kit (`data-theme`, `kit-theme`, sonst Systemeinstellung); skaliert auf Handy-Displays und pausiert, wenn die Seite in den Hintergrund geht.
 

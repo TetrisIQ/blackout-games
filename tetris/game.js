@@ -212,6 +212,83 @@ if (typeof document !== "undefined") {
 
   let state = createState();
   let paused = false;
+
+  // --- How to play: shown on the first visit, then from the button or with "?" ---
+  const helpKey = `${GAME_ID}:help`;
+  const helpEl = (id) => document.getElementById(id);
+  const demo = (html) => `<p class="demo">${html}</p>`;
+  const bl = (c, n = 1) => `<span style="color:${c}">${"&#9632;".repeat(n)}</span>`;
+  const HELP = [
+    {
+      title: "Stack the blocks",
+      html: `<p>Pieces fall from the top. Move and <b>rotate</b> them so they fill a row completely: <b>full rows vanish</b> and everything above drops down.</p>
+        ${demo(`${bl("#00bcd4", 4)}<small>fill the row</small>${bl("#9b59b6", 3)}${bl("#f1c40f", 1)}`)}
+        <p>The faint outline shows where the piece will land. The small box shows the next piece.</p>`,
+    },
+    {
+      title: "Points and levels",
+      html: `<p>1, 2, 3 or 4 rows at once give <b>100, 300, 500 or 800 points</b> times your level. Soft drop gives 1 point per row, hard drop 2.</p>
+        ${demo(`${bl("#e74c3c", 1)}${bl("#e74c3c", 1)}${bl("#e74c3c", 1)}${bl("#e74c3c", 1)} <small>4 rows = most points</small>`)}
+        <p>Every <b>10 rows</b> the level goes up and the pieces fall faster. The game ends when the stack reaches the top.</p>`,
+    },
+    {
+      title: "Controls",
+      html: `<p><b>Keyboard:</b> <kbd>&larr;</kbd> <kbd>&rarr;</kbd> move, <kbd>&uarr;</kbd> rotate, <kbd>&darr;</kbd> soft drop, <kbd>Space</kbd> hard drop, <kbd>P</kbd> pause, <kbd>R</kbd> restart, <kbd>?</kbd> this guide.</p>
+        <p><b>Touch:</b> use the buttons below the board (hold &larr; &rarr; &darr; to repeat). Tap the board after a game over to start again.</p>
+        <p>The game pauses when you leave the page. Your best score is saved in this browser.</p>`,
+    },
+  ];
+  let helpOpen = false;
+  let helpIndex = 0;
+  let pausedByHelp = false;
+
+  function helpPage(i) {
+    helpIndex = Math.min(HELP.length - 1, Math.max(0, i));
+    const page = HELP[helpIndex];
+    helpEl("help-title").textContent = page.title;
+    helpEl("help-body").innerHTML = page.html;
+    helpEl("help-dots").innerHTML = HELP.map((_, k) => (k === helpIndex ? "<b>&#9679;</b>" : "&#9675;")).join("");
+    helpEl("help-back").disabled = helpIndex === 0;
+    helpEl("help-next").textContent = helpIndex === HELP.length - 1 ? "Let's play" : "Next";
+  }
+
+  function showHelp() {
+    if (helpOpen) return;
+    helpOpen = true;
+    pausedByHelp = !paused; // the game waits behind the guide
+    paused = true;
+    helpPage(0);
+    helpEl("help").hidden = false;
+  }
+
+  function helpNext() {
+    if (helpIndex >= HELP.length - 1) closeHelp();
+    else helpPage(helpIndex + 1);
+  }
+
+  function closeHelp() {
+    helpOpen = false;
+    helpEl("help").hidden = true;
+    if (pausedByHelp) paused = false;
+    try { localStorage.setItem(helpKey, "1"); } catch (e) { /* storage blocked */ }
+  }
+
+  // Returns true when the key was used by the guide.
+  function helpHandleKey(e, key) {
+    if (key === "?" ) { showHelp(); e.preventDefault(); return true; }
+    if (!helpOpen) return false;
+    if (key === "Escape") closeHelp();
+    else if (key === "ArrowRight" || key === "Enter" || key === " ") { if (e.target && e.target.tagName === "BUTTON") return true; helpNext(); }
+    else if (key === "ArrowLeft") helpPage(helpIndex - 1);
+    e.preventDefault();
+    return true;
+  }
+
+  helpEl("btn-help").addEventListener("click", showHelp);
+  helpEl("help-back").addEventListener("click", () => helpPage(helpIndex - 1));
+  helpEl("help-next").addEventListener("click", helpNext);
+  helpEl("help-close").addEventListener("click", closeHelp);
+
   let best = Number(localStorage.getItem(bestKey) || 0);
   let acc = 0;
   let last = performance.now();
@@ -291,6 +368,7 @@ if (typeof document !== "undefined") {
 
   document.addEventListener("keydown", (e) => {
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (helpHandleKey(e, key)) return;
     if (key === "r") restart();
     else if (key === "p" && !state.over) paused = !paused;
     else if (!paused && !state.over) {
@@ -350,5 +428,6 @@ if (typeof document !== "undefined") {
     draw();
     requestAnimationFrame(frame);
   }
+  try { if (localStorage.getItem(helpKey) !== "1") showHelp(); } catch (e) { showHelp(); } // first visit
   requestAnimationFrame(frame);
 }

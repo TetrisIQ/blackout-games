@@ -163,3 +163,117 @@ canvas {
 .dpad [data-dir=left] { grid-area: left; }
 .dpad [data-dir=down] { grid-area: down; }
 .dpad [data-dir=right] { grid-area: right; }
+
+/* How to play */
+#help {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+#help[hidden] {
+  display: none;
+}
+
+#help .card {
+  width: min(440px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+#help h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+#help-body p {
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+#help-body .demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 10px 0;
+  font-size: 1.7rem;
+  background: var(--board);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+#help-body .demo small {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 6px;
+}
+
+#help-body .g0 { color: #e74c3c; }
+#help-body .g1 { color: #3498db; }
+#help-body .g2 { color: #2ecc71; }
+#help-body .g3 { color: #f1c40f; }
+#help-body .g4 { color: #9b59b6; }
+#help-body .g5 { color: #e67e22; }
+
+#help-body .rock {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  background: #4a4f57;
+  border: 2px solid #6b727d;
+}
+
+#help-body .cage {
+  display: inline-block;
+  border: 2px solid var(--cage);
+  padding: 0 4px;
+  line-height: 1.5rem;
+}
+
+#help .dots {
+  text-align: center;
+  margin: 8px 0;
+  color: var(--muted);
+  letter-spacing: 0.3em;
+}
+
+#help .dots b {
+  color: var(--accent);
+}
+
+#help .nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+#help .nav #help-next {
+  border-color: var(--accent);
+  flex: 1;
+}
+
+#help-body .demo .snake-body { color: #2ecc71; }
+#help-body .demo .snake-head { color: #1e8e4e; }
+#help-body .demo .food { color: #e74c3c; }
+#help-body .demo .wall { color: var(--muted); }
+#help-body kbd {
+  font: inherit;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--surface);
+}

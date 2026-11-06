@@ -32,8 +32,21 @@
       <button data-act="down" data-repeat type="button" aria-label="Soft drop">&darr;</button>
       <button data-act="drop" type="button" aria-label="Hard drop">&#x2913;</button>
     </div>
-    <p class="hint kbd-hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart</p>
+    <p class="hint kbd-hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart · ? how to play</p>
+    <p><button id="btn-help" type="button">How to play</button></p>
   </main>
+  <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title"></h2>
+      <div id="help-body"></div>
+      <p id="help-dots" class="dots"></p>
+      <p class="nav">
+        <button id="help-back" type="button">Back</button>
+        <button id="help-next" type="button">Next</button>
+        <button id="help-close" type="button">Skip</button>
+      </p>
+    </div>
+  </div>
   <script src="game.js"></script>
 </body>
 </html>
