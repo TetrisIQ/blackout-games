@@ -20,6 +20,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 | [tetris](tetris/) | Tetris |
 | [snake](snake/) | Snake |
 | [match3](match3/) | Match 3 |
+| [tap-match](tap-match/) | Tap Match |
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.
