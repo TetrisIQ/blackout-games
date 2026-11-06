@@ -34,7 +34,12 @@ jobs:
           workspaces: kit
       - run: cargo build --release --locked --manifest-path kit/Cargo.toml
       - run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"
-      - run: kit/target/release/kit catalog check .
+      - name: Check the repository as a local catalog
+        run: |
+          # Only the tracked files: the kit checkout inside the workspace is not part of the catalog.
+          mkdir "$RUNNER_TEMP/repo"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/repo"
+          kit/target/release/kit catalog check "$RUNNER_TEMP/repo"
       - uses: softprops/action-gh-release@v2
         with:
           files: |

@@ -35,4 +35,8 @@ jobs:
         run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"
       # The repository folder itself is a local catalog (kit catalog add games <folder>).
       - name: Check the repository as a local catalog
-        run: kit/target/release/kit catalog check .
+        run: |
+          # Only the tracked files: the kit checkout inside the workspace is not part of the catalog.
+          mkdir "$RUNNER_TEMP/repo"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/repo"
+          kit/target/release/kit catalog check "$RUNNER_TEMP/repo"
