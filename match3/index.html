@@ -36,7 +36,7 @@
     </div>
     <section id="levels" hidden>
       <h2>Levels</h2>
-      <p><button id="endless" type="button">&infin; Endless</button></p>
+      <p><button id="endless" type="button">&infin; Endless</button> <button id="help-btn" type="button">How to play</button></p>
       <h3>World 1 - Classic</h3>
       <div id="grid"></div>
       <h3>World 2 - Walls &amp; Cages</h3>
@@ -45,6 +45,18 @@
       <p><button id="levels-close" type="button">Back to game (Esc)</button></p>
     </section>
   </main>
+  <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title"></h2>
+      <div id="help-body"></div>
+      <p id="help-dots" class="dots"></p>
+      <p class="nav">
+        <button id="help-back" type="button">Back</button>
+        <button id="help-next" type="button">Next</button>
+        <button id="help-close" type="button">Skip</button>
+      </p>
+    </div>
+  </div>
   <script src="game.js"></script>
 </body>
 </html>

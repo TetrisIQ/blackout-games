@@ -590,3 +590,92 @@ test("debug: awardChance overrides the combo award chance", () => {
     }
   }
 });
+
+// A board whose one move (swap (2,0)/(2,1)) is a plain 3-match, with two special gems elsewhere.
+function finaleBoard() {
+  const b = set(base(), [[0, 0, 4], [1, 0, 4], [2, 1, 4], [7, 2, 1, "blast"], [5, 5, 0, "row"]]);
+  assert.equal(g.findGroups(b).length, 0);
+  return b;
+}
+const noSpecials = (b) => b.flat().every((c) => !c.s || c.s === "rock");
+
+test("finale: when the level ends every special gem fires in turn for a bonus", () => {
+  const state = stateWith(finaleBoard());
+  state.movesLeft = 1; // this move is the last one
+  const res = g.trySwap(state, { x: 2, y: 0 }, { x: 2, y: 1 });
+  assert.equal(state.status, "over");
+  assert.ok(res.finale.length >= 2);
+  assert.equal(res.finale[0].special, "blast"); // top-left first
+  assert.equal(res.finale[0].x, 7);
+  assert.ok(res.finale[0].steps[0].cleared.length >= 6);
+  for (const round of res.finale) assert.equal(round.bonus, g.FINALE_BONUS);
+  assert.ok(noSpecials(state.board));
+  assert.equal(g.findGroups(state.board).length, 0);
+  const finalePoints = res.finale.reduce((sum, r) => sum + r.bonus + r.steps.reduce((a, s) => a + s.points, 0), 0);
+  assert.equal(state.score, res.steps.reduce((a, s) => a + s.points, 0) + finalePoints);
+});
+
+test("finale: also runs when the level is cleared, after the move bonus", () => {
+  const state = stateWith(finaleBoard());
+  state.score = state.target - 1;
+  const res = g.trySwap(state, { x: 2, y: 0 }, { x: 2, y: 1 });
+  assert.equal(state.status, "levelclear");
+  assert.ok(res.bonus > 0);
+  assert.ok(res.finale.length >= 2);
+  assert.ok(noSpecials(state.board));
+});
+
+test("finale: does not run while the level goes on", () => {
+  const state = stateWith(finaleBoard());
+  const res = g.trySwap(state, { x: 2, y: 0 }, { x: 2, y: 1 });
+  assert.equal(state.status, "play");
+  assert.deepEqual(res.finale, []);
+  assert.ok(state.board.flat().some((c) => c.s));
+});
+
+test("finale: a finale that reaches the goal saves a level that ran out of moves", () => {
+  const state = stateWith(finaleBoard());
+  state.movesLeft = 1;
+  state.target = 200;
+  g.trySwap(state, { x: 2, y: 0 }, { x: 2, y: 1 });
+  assert.equal(state.status, "levelclear");
+  assert.equal(state.stars, 1);
+});
+
+test("finale: specials that appear while firing are fired too (random play)", () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const rnd = mulberry32(seed);
+    const state = g.createState(rnd, 3);
+    state.movesLeft = 12;
+    while (state.status === "play") {
+      const [a, b] = g.findMove(state.board);
+      const res = g.trySwap(state, a, b);
+      if (state.status !== "play") assert.ok(noSpecials(state.board), `specials left at seed ${seed}`);
+      else assert.deepEqual(res.finale, []);
+      assert.ok(full(state.board));
+    }
+  }
+});
+
+test("finale: endless mode never ends, so it never fires one", () => {
+  const state = g.startEndless(g.createState(mulberry32(2), 1));
+  for (let i = 0; i < 30; i++) {
+    const [a, b] = g.findMove(state.board);
+    assert.deepEqual(g.trySwap(state, a, b).finale, []);
+  }
+});
+
+test("finale: a colour gem (the rainbow star) clears one complete colour", () => {
+  for (let seed = 1; seed <= 20; seed++) {
+    const state = stateWith(set(base(), [[3, 3, g.COLOR, "color"]]));
+    state.random = mulberry32(seed);
+    const before = state.board.map((r) => r.map((c) => c.t));
+    const [round] = g.finale(state);
+    assert.equal(round.special, "color");
+    const first = round.steps[0].cleared;
+    const colours = new Set(first.map((p) => before[p.y][p.x]).filter((t) => t >= 0));
+    assert.equal(colours.size, 1, "exactly one colour");
+    const [t] = colours;
+    assert.equal(first.length, before.flat().filter((x) => x === t).length + 1); // every gem of it, plus the star
+  }
+});

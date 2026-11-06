@@ -8,6 +8,8 @@ const ROCK = -2; // type of a blocked cell: never moves, never clears
 const WORLD_SIZE = 100;
 const MAX_LEVEL = 200; // world 1 (classic) + world 2 (walls and cages)
 const BONUS_PER_MOVE = 50;
+const FINALE_BONUS = 100; // per special gem fired when a level ends
+const FINALE_MAX = 50; // safety limit for chains of new specials
 const POWERUPS = ["hammer", "bomb", "rainbow"]; // earned in endless mode, usable everywhere
 const AWARD_CHANCE = 0.5; // per combo of 4+ gems in endless mode
 const POWERUP_WEIGHTS = { hammer: 55, bomb: 30, rainbow: 15 }; // which powerup an award is: common to rare
@@ -433,6 +435,27 @@ function awardPowerups(state, steps) {
   return got;
 }
 
+// When a level ends, every special gem on the board fires, one after another (top-left first), each worth
+// FINALE_BONUS plus whatever it clears. Specials that appear from the cascades fire too, until none are left.
+// Returns the rounds: { x, y, special, steps, bonus }.
+function finale(state) {
+  const rounds = [];
+  for (let n = 0; n < FINALE_MAX; n++) {
+    let found = null;
+    for (let y = 0; y < H && !found; y++) {
+      for (let x = 0; x < W && !found; x++) {
+        const c = state.board[y][x];
+        if (c && c.s && c.s !== "rock") found = { x, y, special: c.s };
+      }
+    }
+    if (!found) break;
+    const steps = resolve(state, new Set([idx(found.x, found.y)]), []);
+    state.score += FINALE_BONUS;
+    rounds.push({ ...found, steps, bonus: FINALE_BONUS });
+  }
+  return rounds;
+}
+
 // Plays a swap. Invalid swaps change nothing. Returns { valid, start, steps, shuffled, bonus }.
 function trySwap(state, a, b) {
   const none = { valid: false, steps: [], shuffled: false, bonus: 0, awards: [] };
@@ -454,8 +477,18 @@ function trySwap(state, a, b) {
   } else if (state.movesLeft <= 0) {
     state.status = "over";
   }
+  const board = cloneBoard(state.board); // what the player sees before the finale starts
+  let rounds = [];
+  if (state.status !== "play") {
+    rounds = finale(state);
+    // A finale that lifts the score over the goal (with all cages gone) still saves the level.
+    if (state.status === "over" && state.score >= state.target && cagesLeft(state.board) === 0) {
+      state.status = "levelclear";
+      state.stars = starsFor(0, state.moves);
+    }
+  }
   const awards = awardPowerups(state, steps);
-  return { valid: true, start, steps, shuffled, bonus, awards };
+  return { valid: true, start, steps, shuffled, bonus, awards, board, finale: rounds };
 }
 
 // Uses a powerup on the gem at pos (any mode, costs no move):
@@ -489,7 +522,7 @@ function nextLevel(state) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    W, H, TYPES, COLOR, ROCK, WORLD_SIZE, MAX_LEVEL, cagesLeft, isFixed, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
+    W, H, TYPES, COLOR, ROCK, WORLD_SIZE, MAX_LEVEL, cagesLeft, isFixed, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, FINALE_BONUS, finale, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
     findMove, createBoard, createState, shuffle, trySwap, nextLevel,
   };
 }
@@ -542,13 +575,14 @@ if (typeof document !== "undefined") {
         return {
           unlocked: Math.min(MAX_LEVEL, Math.max(1, Math.floor(Number(p.unlocked)) || 1)),
           endlessBest: Math.max(0, Number(p.endlessBest) || 0),
+          helpSeen: !!p.helpSeen,
           powerups: Object.fromEntries(POWERUPS.map((k) => [k, Math.max(0, Math.floor(Number(p.powerups && p.powerups[k])) || 0)])),
           stars: p.stars && typeof p.stars === "object" ? p.stars : {},
           best: p.best && typeof p.best === "object" ? p.best : {},
         };
       }
     } catch (e) { /* corrupt or missing: start fresh */ }
-    return { unlocked: 1, endlessBest: 0, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} };
+    return { unlocked: 1, endlessBest: 0, helpSeen: false, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} };
   }
 
   const progress = loadProgress();
@@ -564,6 +598,7 @@ if (typeof document !== "undefined") {
   let busy = false;
   let drag = null;
   let panelOpen = false;
+  let helpOpen = false;
   let armed = null; // powerup waiting for a target gem
   const LABELS = { hammer: "Hammer", bomb: "Bomb", rainbow: "Rainbow" };
   let shownScore = 0;
@@ -710,11 +745,11 @@ if (typeof document !== "undefined") {
     await tween(90, () => {});
   }
 
-  async function shuffleAnim() {
+  async function shuffleAnim(board) {
     say("No moves left - board shuffled");
     const movable = () => sprites.filter((s) => !isFixed(s.g));
     await tween(220, (t) => { for (const s of movable()) s.sc = 1 - t; }, easeOut);
-    setBoard(state.board);
+    setBoard(board);
     for (const s of movable()) s.sc = 0;
     await tween(300, (t) => { for (const s of movable()) s.sc = t; }, easeBack);
   }
@@ -938,7 +973,7 @@ if (typeof document !== "undefined") {
   // Replays a resolved move (swap or powerup): steps, shuffle, bonus, earned powerups, saving.
   async function finishMove(res) {
     for (const step of res.steps) await animateStep(step);
-    if (res.shuffled) await shuffleAnim();
+    if (res.shuffled) await shuffleAnim(res.board || state.board);
     for (const type of res.awards) {
       popup(W / 2 - 0.5, H / 2 - 0.5, `${LABELS[type]} earned!`, 26);
       say(`Powerup earned: ${LABELS[type]}`);
@@ -948,9 +983,30 @@ if (typeof document !== "undefined") {
       popup(W / 2 - 0.5, H / 2 - 0.5, `+${res.bonus} bonus`, 28);
       say(`Level clear! +${res.bonus} bonus for unused moves`);
     }
+    if (res.finale && res.finale.length) await playFinale(res);
     targetScore = state.score;
     if (state.status !== "play" || state.endless || res.powerup || res.awards.length) recordResult();
     busy = false;
+  }
+
+  // Level over: each special gem fires in turn, pulsing first; the flat bonus pops up where it was.
+  async function playFinale(res) {
+    popup(W / 2 - 0.5, H / 2 - 0.5, "Finale!", 30);
+    say(`Finale: ${res.finale.length} special gem${res.finale.length > 1 ? "s" : ""} fire for +${FINALE_BONUS} each`);
+    await tween(450, () => {});
+    for (const round of res.finale) {
+      const s = spriteAt(round.x, round.y);
+      if (s) {
+        shake = Math.max(shake, 2);
+        await tween(260, (t) => { s.sc = 1 + 0.5 * Math.sin(t * Math.PI); s.flash = 0.7 * Math.sin(t * Math.PI); }, easeOut);
+        s.sc = 1;
+        s.flash = 0;
+      }
+      popup(round.x, round.y, `+${round.bonus}`, 22);
+      targetScore += round.bonus;
+      for (const step of round.steps) await animateStep(step);
+      await tween(120, () => {});
+    }
   }
 
   // Lets the powerup's button glow and pop for a moment (restarts if it is earned again).
@@ -1079,6 +1135,15 @@ if (typeof document !== "undefined") {
   document.addEventListener("keydown", (e) => {
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return; // typing in the debug window
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (helpOpen) {
+      if (key === "Escape") closeHelp();
+      else if (key === "ArrowRight" || key === "Enter" || key === " ") { if (e.target && e.target.tagName === "BUTTON") return; helpNext(); }
+      else if (key === "ArrowLeft") helpPage(helpIndex - 1);
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (key === "?") { showHelp(); e.preventDefault(); return; }
     if (key === "l") { togglePanel(); }
     else if (key === "Escape" && panelOpen) togglePanel(false);
     else if (panelOpen || busy) return;
@@ -1102,6 +1167,73 @@ if (typeof document !== "undefined") {
     else return;
     e.preventDefault();
   });
+
+  // --- How to play: shown on the first visit, and from the level overview (or with "?") ---
+  const demo = (html) => `<p class="demo">${html}</p>`;
+  const g = (n, ch) => `<span class="g${n}">${ch}</span>`;
+  const HELP = [
+    {
+      title: "Match three",
+      html: `<p>Swap two <b>neighbouring gems</b> (tap one and then the next, or drag a gem) so that <b>3 or more of the same colour</b> line up. They vanish, the rest falls down and new gems drop in. Chains score more.</p>
+        ${demo(`${g(0, "&#9679;")}${g(0, "&#9679;")}${g(1, "&#9632;")}${g(0, "&#9679;")} <small>swap</small> ${g(0, "&#9679;")}${g(0, "&#9679;")}${g(0, "&#9679;")}${g(1, "&#9632;")}`)}
+        <p>Every level has a <b>score goal</b> and a <b>limit of moves</b>. A swap that makes no match does not count. Out of ideas? Press <b>Hint</b>.</p>`,
+    },
+    {
+      title: "Special gems",
+      html: `<p>Bigger matches create special gems. They fire when you match them or when another special hits them:</p>
+        ${demo(`${g(2, "&#9670;")}${g(2, "&#9670;")}${g(2, "&#9670;")}${g(2, "&#9670;")} <small>4 in a row = clears a whole row or column</small>`)}
+        ${demo(`${g(3, "&#11042;")}${g(3, "&#11042;")}${g(3, "&#11042;")}${g(3, "&#11042;")}${g(3, "&#11042;")} <small>5 = colour gem: swap it with any gem to clear that colour</small>`)}
+        ${demo(`${g(4, "&#9650;")}${g(4, "&#9650;")}${g(4, "&#9650;")} <small>L or T shape = bomb, clears 3x3</small>`)}
+        <p>When a level ends, all special gems on the board fire for bonus points.</p>`,
+    },
+    {
+      title: "Walls and cages",
+      html: `<p>From level 101 the board has obstacles:</p>
+        ${demo(`<span class="rock"></span> <small>Rock: blocked. Nothing moves or falls through it.</small>`)}
+        ${demo(`<span class="cage">${g(5, "&#9679;")}</span> <small>Cage: the gem is locked. Clear it or a gem next to it to break the cage (gold cages take two hits).</small>`)}
+        <p>To win a level, reach the score goal <b>and</b> break all cages.</p>`,
+    },
+    {
+      title: "Powerups and endless mode",
+      html: `<p>In <b>Endless</b> mode (Levels menu) there is no goal and no move limit. Every <b>combo of 4 or more gems</b> has a 50% chance to give you a powerup:</p>
+        <p><b>Hammer</b> clears one gem, <b>Bomb</b> clears 3x3, <b>Rainbow</b> clears one colour. Press its button (or 1, 2, 3), then pick a gem. Powerups cost no move and work in every level.</p>
+        <p>Your progress, stars and powerups are saved in this browser. You can open this guide again from the <b>Levels</b> menu (or with ?).</p>`,
+    },
+  ];
+  let helpIndex = 0;
+
+  function helpPage(i) {
+    helpIndex = Math.min(HELP.length - 1, Math.max(0, i));
+    const page = HELP[helpIndex];
+    el("help-title").textContent = page.title;
+    el("help-body").innerHTML = page.html;
+    el("help-dots").innerHTML = HELP.map((_, k) => (k === helpIndex ? "<b>&#9679;</b>" : "&#9675;")).join("");
+    el("help-back").disabled = helpIndex === 0;
+    el("help-next").textContent = helpIndex === HELP.length - 1 ? "Let's play" : "Next";
+  }
+
+  function showHelp() {
+    helpOpen = true;
+    armed = null;
+    helpPage(0);
+    el("help").hidden = false;
+  }
+
+  function helpNext() {
+    if (helpIndex >= HELP.length - 1) closeHelp();
+    else helpPage(helpIndex + 1);
+  }
+
+  function closeHelp() {
+    helpOpen = false;
+    el("help").hidden = true;
+    if (!progress.helpSeen) { progress.helpSeen = true; try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* ignore */ } }
+  }
+
+  el("help-btn").addEventListener("click", showHelp);
+  el("help-back").addEventListener("click", () => helpPage(helpIndex - 1));
+  el("help-next").addEventListener("click", helpNext);
+  el("help-close").addEventListener("click", closeHelp);
 
   // --- level overview ---
 
@@ -1224,7 +1356,7 @@ if (typeof document !== "undefined") {
     },
     unlockAll() { progress.unlocked = MAX_LEVEL; persist(); buildGrid(); },
     resetProgress() {
-      Object.assign(progress, { unlocked: 1, endlessBest: 0, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} });
+      Object.assign(progress, { unlocked: 1, endlessBest: 0, helpSeen: false, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} });
       for (const p of POWERUPS) state.powerups[p] = 0;
       persist();
       buildGrid();
@@ -1301,7 +1433,7 @@ if (typeof document !== "undefined") {
       head, out,
       title("Level"),
       row(levelInput, btn("Go", () => dbg.goto(levelInput.value)), btn("Prev", () => dbg.goto((state.level || 1) - 1)), btn("Next", () => dbg.goto((state.level || 0) + 1)), btn("Endless", () => dbg.endless())),
-      row(btn("Win", () => dbg.win()), btn("Lose", () => dbg.lose()), btn("Retry", () => dbg.retry()), btn("Unlock all", () => dbg.unlockAll()), btn("Reset progress", () => { if (confirm("Reset all saved progress?")) dbg.resetProgress(); })),
+      row(btn("Win", () => dbg.win()), btn("Lose", () => dbg.lose()), btn("Retry", () => dbg.retry()), btn("Unlock all", () => dbg.unlockAll()), btn("Tutorial", showHelp), btn("Reset progress", () => { if (confirm("Reset all saved progress?")) dbg.resetProgress(); })),
       title("Moves and score"),
       row(btn("+5 moves", () => dbg.addMoves(5)), btn("-1 move", () => dbg.addMoves(-1)), freezeLabel),
       row(scoreInput, btn("+ score", () => dbg.addScore(Number(scoreInput.value) || 0)), btn("- score", () => dbg.addScore(-(Number(scoreInput.value) || 0)))),
@@ -1338,5 +1470,6 @@ if (typeof document !== "undefined") {
   buildGrid();
   say(goalText());
   newBoard();
+  if (!progress.helpSeen) showHelp(); // first visit
   requestAnimationFrame(frame);
 }

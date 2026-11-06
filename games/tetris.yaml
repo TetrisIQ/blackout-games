@@ -1,0 +1,14 @@
+id: tetris
+name: "Tetris"
+description: "Falling-blocks puzzle on a 10x20 board with ghost piece, next preview and levels."
+category: games
+type: files
+source:
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.1.2/tetris.zip"
+sha256: 88f285f5ff5459abfb6a560fe17104077a23b724d865eb6aa2ad8a5efcbcd92e
+size_bytes: 18220
+license:
+  spdx: "MIT"
+content:
+  media: games
+  extract: zip

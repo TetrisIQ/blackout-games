@@ -5,7 +5,7 @@ Tausche benachbarte Steine auf einem 8×8 Feld, bilde Reihen aus mindestens drei
 ## Steuerung
 - Maus/Touch: zwei benachbarte Steine nacheinander anklicken oder einen Stein in Richtung des Nachbarn ziehen
 - Pfeiltasten: Cursor bewegen, Leertaste/Enter: auswählen, danach Pfeiltaste: tauschen
-- H: Hinweis, 1/2/3: Powerup, L: Level-Übersicht, Enter: nächstes Level, P: Pause, R: Level neu starten
+- H: Hinweis, ?: Anleitung, 1/2/3: Powerup, L: Level-Übersicht, Enter: nächstes Level, P: Pause, R: Level neu starten
 
 ## Regeln
 - Ein Zug tauscht zwei benachbarte Steine. Er ist nur gültig, wenn dadurch mindestens eine Reihe aus 3+ gleichen Steinen entsteht; ungültige Züge kosten nichts und werden nicht ausgeführt.
@@ -18,6 +18,7 @@ Tausche benachbarte Steine auf einem 8×8 Feld, bilde Reihen aus mindestens drei
 - Zwei Spezialsteine tauschen ist immer gültig und löst beide aus. Farbstein + Spezialstein: alle Steine der Farbe des Partners werden zu diesem Spezialstein und lösen aus. Zwei Farbsteine räumen das ganze Feld.
 - **200 Levels in zwei Welten.** Welt 1 (Level 1–100, klassisch) und Welt 2 (Level 101–200, Wände und Käfige); Welt 2 wird mit Level 100 freigeschaltet.
 - **Level.** Jedes Level hat Züge und ein Punkteziel; Punkte zählen pro Level ab 0. Das Level ist geschafft, sobald das Ziel erreicht ist; übrige Züge geben 50 Punkte Bonus und Sterne (3 Sterne: mindestens die Hälfte der Züge übrig, 2 Sterne: ein Viertel, sonst 1). Sind die Züge weg, bevor das Ziel erreicht ist, ist das Level verloren (R: nochmal).
+- **Finale:** Endet ein Level (geschafft oder keine Züge mehr), lösen alle Spezialsteine auf dem Feld nacheinander aus (oben links zuerst, jeder pulsiert kurz). Jeder bringt 100 Extrapunkte plus die Punkte für alles, was er räumt. Entstehen dabei durch Kaskaden neue Spezialsteine, werden auch diese ausgelöst, bis keiner mehr da ist. Reichen die Finale-Punkte, um ein Level ohne Züge doch noch über das Ziel zu bringen (und sind alle Käfige weg), gilt es als geschafft (1 Stern). Im Endlos-Modus gibt es kein Finale.
 - **Schwierigkeit Welt 1:** Alle Level nutzen 6 Farben. Die Züge sinken von 22 auf 16, das Ziel steigt von 1100 auf 2900 Punkte (`levelConfig`).
 - **Welt 2 – Wände und Käfige.** Jedes Level hat ein eigenes Spielfeld:
   - **Felsen** sind gesperrte Felder: Sie lassen sich nicht tauschen, nichts fällt durch sie hindurch, und sie werden nie gelöscht (auch nicht von Spezialsteinen oder Powerups). Steine fallen innerhalb der Spalte zwischen Felsen und werden von oben im jeweiligen Abschnitt nachgefüllt.
@@ -34,6 +35,9 @@ Tausche benachbarte Steine auf einem 8×8 Feld, bilde Reihen aus mindestens drei
 
 ## Animationen
 Tauschen (ungültige Züge federn zurück), Auflösen mit Partikeln und Punkte-Popups, Nachfallen und Nachrutschen, Kaskaden-Hinweis, Bildschirmwackeln bei großen Räumungen, Mischen und Level-Start. Bei `prefers-reduced-motion` werden die Animationen übersprungen.
+
+## Anleitung
+Beim ersten Öffnen erscheint eine kurze Anleitung in vier Seiten (Match-Regel, Spezialsteine, Wände und Käfige, Powerups und Endlos); „Skip“, Esc oder „Let's play“ schließen sie, und danach kommt sie nicht mehr von allein (`helpSeen` im gespeicherten Fortschritt). Erneut aufrufen: Button „How to play“ in der Level-Übersicht oder die Taste `?`. Pfeiltasten blättern, Esc schließt.
 
 ## Darstellung
 Folgt dem hellen/dunklen Theme von kit (`data-theme`, `kit-theme`, sonst Systemeinstellung). Für Handys: Das Feld skaliert, Hinweis/Neustart/Level-Buttons und Powerup-Buttons sind groß genug, Tippen auf das Feld setzt nach einem Level fort, die Level-Übersicht hat 5 Spalten auf schmalen Displays.

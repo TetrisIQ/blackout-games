@@ -21,7 +21,8 @@ jobs:
             [ -d "$t" ] && node --test "$t"/*.test.js
           done
       - name: Build packages and catalog
-        run: node tools/build-catalog.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/dist"
+        # --verify: the catalog committed in the repository must match this tag (node tools/update-catalog.mjs --tag <tag>)
+        run: node tools/build-catalog.mjs --tag "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/dist" --verify
       # Never publish a catalog that kit would reject.
       - uses: actions/checkout@v4
         with:
@@ -33,6 +34,7 @@ jobs:
           workspaces: kit
       - run: cargo build --release --locked --manifest-path kit/Cargo.toml
       - run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"
+      - run: kit/target/release/kit catalog check .
       - uses: softprops/action-gh-release@v2
         with:
           files: |

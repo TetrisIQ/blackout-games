@@ -31,3 +31,6 @@ jobs:
       - run: cargo build --release --locked --manifest-path kit/Cargo.toml
       - name: Check the catalog with kit
         run: kit/target/release/kit catalog check "$RUNNER_TEMP/dist/catalog"
+      # The repository folder itself is a local catalog (kit catalog add games <folder>).
+      - name: Check the repository as a local catalog
+        run: kit/target/release/kit catalog check .
