@@ -1,12 +1,12 @@
 id: match3
 name: "Match 3"
-description: "Swap neighbouring gems on an 8x8 board to line up three or more, build special gems and chain cascades to reach each level's score goal."
+description: "Swap neighbouring gems on an 8x8 board to line up three or more, build special gems and chain cascades. Four difficulties and ten worlds, each with a new element - rocks, cages, ice, conveyors, slime, portals, countdown bombs, fruit and fog."
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.0/match3.zip"
-sha256: d7856b9bb2efa0962b2d09f2929d845b7c6b60659e4c606d3d526c8ddd0f1783
-size_bytes: 84202
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.2/match3.zip"
+sha256: 3245ec3f1cddda8d115e6a7d5b0783390ffffc0b4a7f9bddeff9e1599612a0b2
+size_bytes: 117898
 license:
   spdx: "MIT"
 content:

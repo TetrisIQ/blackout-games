@@ -4,9 +4,9 @@ description: "Falling-blocks puzzle on a 10x20 board with ghost piece, next prev
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.0/tetris.zip"
-sha256: d8f50b422b6b8e2261a6f39bb038cfb616fb4510bc73272070fe0c374cdfc40d
-size_bytes: 24844
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.2.2/tetris.zip"
+sha256: d13adade453a1e578efde483948bbbcf28ee82abc4c1e50dfe4acdc07d242d73
+size_bytes: 26094
 license:
   spdx: "MIT"
 content:
