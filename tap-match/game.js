@@ -298,6 +298,16 @@ if (typeof document !== "undefined") {
   if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
   if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
+  // --- Telemetry: opt-in through the game library (it sets kit-games:consent and uploads the queue); without it nothing is stored ---
+  function track(event, props) {
+    try {
+      if (localStorage.getItem("kit-games:consent") !== "granted") return;
+      const queue = JSON.parse(localStorage.getItem("kit-games:events") || "[]");
+      queue.push({ event, properties: { game: GAME_ID, ...props }, timestamp: new Date().toISOString() });
+      localStorage.setItem("kit-games:events", JSON.stringify(queue.slice(-500)));
+    } catch (e) { /* storage blocked */ }
+  }
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   let LW = 414; // logical canvas size (set per difficulty); the backing store is scaled to the displayed size
@@ -634,13 +644,59 @@ if (typeof document !== "undefined") {
     setTimeout(() => b.classList.remove("earned"), 1500);
   }
 
+  // --- Telemetry per level: level_start, then one level_end (won / lost / abandoned) with what happened in between ---
+  let run = null;
+  const levelProps = () => ({ level: state.level, difficulty: state.difficulty, world: worldOf(state.level).world });
+
+  function startRun() {
+    const p = levelParams(state.level, state.difficulty);
+    run = { active: 0, picks: 0, matches: 0, clean: 0, trayPeak: 0, traySum: 0, tray4: 0, freeSum: 0, taps: 0, denied: 0, awards: 0, used: { undo: 0, hint: 0, shuffle: 0, slot: 0 }, total: state.tiles.length };
+    track("level_start", { ...levelProps(), tiles: run.total, tile_types: p.types, layers: p.layers, stock_undo: stock.undo, stock_hint: stock.hint, stock_shuffle: stock.shuffle, stock_slot: stock.slot });
+  }
+
+  // The outcome is read from the state when the level is left; a lost level stays open until then, because Undo can rescue it.
+  function endRun() {
+    if (!run) return;
+    const r = run;
+    run = null;
+    track("level_end", {
+      ...levelProps(),
+      outcome: state.won ? "won" : state.over ? "lost" : "abandoned",
+      first_clear: state.won && !cleared.has(state.level),
+      active_s: Math.round(r.active / 100) / 10,
+      picks: r.picks,
+      tiles_total: r.total,
+      tiles_left: state.tiles.length,
+      tray_cap: state.cap,
+      tray_peak: r.trayPeak,
+      tray_avg: r.picks ? Math.round((r.traySum / r.picks) * 100) / 100 : 0,
+      tray_ge4_picks: r.tray4, // picks that left 4+ tiles in the tray: the tray was actually in use
+      free_avg: r.picks ? Math.round((r.freeSum / r.picks) * 10) / 10 : 0,
+      matches: r.matches,
+      clean_triples: r.clean,
+      denied_taps: r.denied,
+      awards: r.awards,
+      used_undo: r.used.undo,
+      used_hint: r.used.hint,
+      used_shuffle: r.used.shuffle,
+      used_slot: r.used.slot,
+    });
+  }
+
+  function usedPowerup(kind) {
+    if (run) run.used[kind]++;
+    track("powerup_used", { ...levelProps(), kind, tray: state.tray.length, tiles_left: state.tiles.length });
+  }
+
   function begin(level) {
+    endRun();
     state = createState(level, undefined, 0, difficulty, stock);
     fx = [];
     denied = null;
     hintId = null;
     paused = false;
     inMenu = false;
+    startRun();
     layout(difficulty);
     el("menu").hidden = true;
     el("play").hidden = false;
@@ -697,6 +753,7 @@ if (typeof document !== "undefined") {
   }
 
   function showMenu(level = frontier()) {
+    endRun();
     inMenu = true;
     paused = false;
     menuWorld = worldOf(level).world;
@@ -710,6 +767,7 @@ if (typeof document !== "undefined") {
 
   // --- Difficulty: asked before the levels are shown; every difficulty keeps its own progress ---
   function chooseDifficulty(id) {
+    track("difficulty_chosen", { difficulty: id, cleared: loadCleared(id).size });
     difficulty = id;
     cleared = loadCleared(id);
     scores = load(scoresKey(id), {}) || {};
@@ -719,6 +777,7 @@ if (typeof document !== "undefined") {
   }
 
   function showDifficulty() {
+    endRun();
     inMenu = true;
     paused = false;
     el("play").hidden = true;
@@ -760,8 +819,18 @@ if (typeof document !== "undefined") {
     hintId = null;
     if (toastType !== null) showToast(null);
     const from = { x: OX + hit.x * U, y: hit.y * U + OY };
+    const free = run ? state.tiles.filter((t) => isFree(state.tiles, t)).length : 0;
     const res = pick(state, hit.id);
-    if (!res) { denied = { id: hit.id, t0: performance.now() }; return; }
+    if (!res) { denied = { id: hit.id, t0: performance.now() }; if (run) run.denied++; return; }
+    if (run) {
+      run.picks++;
+      run.freeSum += free;
+      run.traySum += state.tray.length;
+      run.trayPeak = Math.max(run.trayPeak, res.tray.length); // right after the pick, before a match vanishes
+      if (state.tray.length >= 4) run.tray4++;
+      if (res.matched.length) { run.matches++; if (res.clean) run.clean++; }
+      run.awards += res.awards.length;
+    }
     const now = performance.now();
     const pop = res.matched.length > 0;
     fx.push({ tile: res.tile, from, slot: res.index, t0: now, pop });
@@ -770,7 +839,7 @@ if (typeof document !== "undefined") {
     }
     saveBest();
     for (const k of res.awards) { flash(k); say(`Series! Powerup earned: ${LABELS[k]}`); }
-    if (state.won) { cleared.add(state.level); save(clearedKey(difficulty), [...cleared]); }
+    if (state.won) { endRun(); cleared.add(state.level); save(clearedKey(difficulty), [...cleared]); }
     saveStock();
   }
 
@@ -780,13 +849,13 @@ if (typeof document !== "undefined") {
     onTap((e.clientX - r.left) * LW / r.width, (e.clientY - r.top) * LH / r.height);
   });
 
-  function doUndo() { if (!paused && undo(state)) { fx = []; hintId = null; saveStock(); } }
-  function doShuffle() { if (!paused && shuffleBoard(state)) { hintId = null; saveStock(); } }
-  function doSlot() { if (!paused && addSlot(state)) saveStock(); }
+  function doUndo() { if (!paused && undo(state)) { fx = []; hintId = null; usedPowerup("undo"); saveStock(); } }
+  function doShuffle() { if (!paused && shuffleBoard(state)) { hintId = null; usedPowerup("shuffle"); saveStock(); } }
+  function doSlot() { if (!paused && addSlot(state)) { usedPowerup("slot"); saveStock(); } }
   function doHint() {
     if (paused) return;
     const t = hint(state);
-    if (t) { hintId = t.id; saveStock(); }
+    if (t) { hintId = t.id; usedPowerup("hint"); saveStock(); }
   }
   function togglePause() { if (!state.over && !state.won) paused = !paused; }
 
@@ -797,6 +866,7 @@ if (typeof document !== "undefined") {
   el("btn-pause").addEventListener("click", togglePause);
   el("btn-restart").addEventListener("click", retry);
   document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over && !state.won) paused = true; });
+  window.addEventListener("pagehide", endRun);
 
   // --- How to play: shown on the first visit, then from the button or with "?" ---
   const demo = (html) => `<p class="demo">${html}</p>`;
@@ -901,7 +971,11 @@ if (typeof document !== "undefined") {
   window.addEventListener("resize", resize);
   resize();
 
+  let lastFrame = 0;
   function frame(now) {
+    // Playing time without pauses, menus and finished levels (a long gap means the tab was hidden).
+    if (run && lastFrame && !inMenu && !paused && !state.over && !state.won) run.active += Math.min(now - lastFrame, 1000);
+    lastFrame = now;
     if (!inMenu) {
       resize();
       draw(now);

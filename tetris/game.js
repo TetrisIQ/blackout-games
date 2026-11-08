@@ -199,6 +199,16 @@ if (typeof document !== "undefined") {
     I: "#00bcd4", O: "#f1c40f", T: "#9b59b6", S: "#2ecc71",
     Z: "#e74c3c", J: "#3f51b5", L: "#ff9800",
   };
+  // --- Telemetry: opt-in through the game library (it sets kit-games:consent and uploads the queue); without it nothing is stored ---
+  function track(event, props) {
+    try {
+      if (localStorage.getItem("kit-games:consent") !== "granted") return;
+      const queue = JSON.parse(localStorage.getItem("kit-games:events") || "[]");
+      queue.push({ event, properties: { game: GAME_ID, ...props }, timestamp: new Date().toISOString() });
+      localStorage.setItem("kit-games:events", JSON.stringify(queue.slice(-500)));
+    } catch (e) { /* storage blocked */ }
+  }
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const nextCtx = document.getElementById("next").getContext("2d");
@@ -212,6 +222,20 @@ if (typeof document !== "undefined") {
 
   let state = createState();
   let paused = false;
+
+  // One game_start / game_end per round; the outcome is read from the state when the round is left.
+  let round = null;
+  function startRound() {
+    round = { active: 0 };
+    track("game_start", {});
+  }
+  function endRound() {
+    if (!round) return;
+    const r = round;
+    round = null;
+    track("game_end", { outcome: state.won ? "won" : state.over ? "over" : "abandoned", score: state.score, lines: state.lines, level: state.level, active_s: Math.round(r.active / 100) / 10 });
+  }
+  startRound();
 
   // --- How to play: shown on the first visit, then from the button or with "?" ---
   const helpKey = `${GAME_ID}:help`;
@@ -349,7 +373,9 @@ if (typeof document !== "undefined") {
 
   function restart() {
     saveBest();
+    endRound();
     state = createState();
+    startRound();
     paused = false;
     acc = 0;
   }
@@ -410,9 +436,11 @@ if (typeof document !== "undefined") {
   });
   document.getElementById("btn-pause").addEventListener("click", togglePause);
   document.getElementById("btn-restart").addEventListener("click", restart);
+  window.addEventListener("pagehide", endRound);
   document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over) { paused = true; stopHold(); } });
 
   function frame(now) {
+    if (round && !paused && !state.over) round.active += Math.min(now - last, 1000);
     acc += now - last;
     last = now;
     if (!paused && !state.over) {
