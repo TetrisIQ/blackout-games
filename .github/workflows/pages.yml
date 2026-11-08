@@ -1,9 +1,12 @@
 name: Pages
 # Publishes the game library (the kit's game hub, all games playable, installable as an offline app).
 # One-time setup: repository Settings -> Pages -> Source: GitHub Actions.
+# Only releases publish the site: it is built from the tag once the Release workflow succeeded (workflow_run runs
+# on the default branch, which the github-pages environment allows). "Run workflow" publishes main by hand.
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -17,12 +20,15 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

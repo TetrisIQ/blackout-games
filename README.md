@@ -29,7 +29,7 @@ Dieselbe Bibliothek wie im kit-Portal (`/games/`), mit allen Spielen spielbar un
     node tools/build-site.mjs --out /tmp/site        # --kit <ordner> falls kit nicht in ../kit liegt
     cd /tmp/site && python -m http.server 8000
 
-Veröffentlicht wird bei jedem Push auf `main` (`.github/workflows/pages.yml`). Einmalig: Repo-Einstellungen -> Pages -> Source: **GitHub Actions**.
+Veröffentlicht wird nur bei Releases: `pages.yml` baut den Tag, sobald der Release-Workflow erfolgreich war (von Hand: Actions -> Pages -> Run workflow, baut `main`). Die CI (`ci.yml`) läuft unabhängig davon auf Branches und Pull Requests und prüft Spiele, Tests, Katalog und Seite; Manifest-Abweichungen von `game.yml` sind dort nur eine Warnung, der Release prüft sie strikt (`--verify`). Einmalig: Repo-Einstellungen -> Pages -> Source: **GitHub Actions**.
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.

@@ -1,6 +1,8 @@
 name: CI
+# Independent of releases: runs on branches and pull requests, not on tags (the Release workflow covers those).
 on:
   push:
+    branches: ["**"]
   pull_request:
 
 jobs:

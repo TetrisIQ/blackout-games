@@ -65,9 +65,11 @@ function checkCatalog() {
       [/^description: (".*")$/m, meta.description, "description", JSON.parse],
       [/^  spdx: (".*")$/m, meta.license, "license", JSON.parse],
     ];
+    // The manifests belong to the release (`update-catalog.mjs --tag`; the release workflow verifies them with
+    // `build-catalog.mjs --verify`), so a game.yml that is ahead of them is only a warning between releases.
     for (const [re, want, label, parse] of checks) {
       const m = text.match(re);
-      if (!m || parse(m[1]) !== want) errors.push(`games/${id}.yaml: ${label} differs from ${id}/${META_FILE}`);
+      if (!m || parse(m[1]) !== want) warnings.push(`games/${id}.yaml: ${label} differs from ${id}/${META_FILE} (node tools/update-catalog.mjs --tag <next release>)`);
     }
     if (!url || !url.endsWith(`/${id}.zip`)) errors.push(`games/${id}.yaml: source.url should end with /${id}.zip`);
   }
