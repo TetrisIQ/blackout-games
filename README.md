@@ -33,7 +33,7 @@ Veröffentlicht wird bei jedem Push auf `main` (`.github/workflows/pages.yml`). 
 
 ## Regeln
 - Jedes Spiel deklariert eine Lizenz; keine urheberrechtlich geschützten Medien.
-- Keine Netzwerkzugriffe, keine CDN-Links, keine externen Assets.
+- Keine Netzwerkzugriffe, keine CDN-Links, keine externen Assets. Anonymes Tracking nur über den Hub und nur mit Einwilligung, siehe [`docs/tracking.md`](docs/tracking.md).
 - Mehr in [`CLAUDE.md`](CLAUDE.md).
 
 ## Installation mit kit

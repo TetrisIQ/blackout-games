@@ -81,8 +81,10 @@ const page = fill(hub, { CSS: css, THEME_JS: theme, CARDS: cards, DATA: json }).
   /<a class="g-portal-link[^>]*>[^<]*<\/a>/,
   `<a class="g-portal-link install-only-browser" id="portal-link" href="https://github.com/${repo}">‹ Source on GitHub</a>`,
 );
-writeFileSync(join(out, "index.html"), page);
-writeFileSync(join(out, "sw.js"), fill(sw, { REV: sha256(Buffer.from(allRevs + hub)).slice(0, 12) }));
+// Anonymous play data (opt-in banner + upload of the queue the games fill); the games themselves stay offline.
+const tracking = readFileSync(join(root, "site", "tracking.js"), "utf8");
+writeFileSync(join(out, "index.html"), page.replace("</body>", () => `<script>\n${tracking}</script>\n</body>`));
+writeFileSync(join(out, "sw.js"), fill(sw, { REV: sha256(Buffer.from(allRevs + hub + tracking)).slice(0, 12) }));
 writeFileSync(join(out, "manifest.webmanifest"), manifest);
 for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]) copyFileSync(join(root, "site", icon), join(out, icon));
 writeFileSync(join(out, ".nojekyll"), "");

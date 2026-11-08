@@ -9,3 +9,4 @@
 7. Theme und Mobil: Farben nur über die CSS-Variablen/`PAL` aus der Vorlage (hell + dunkel prüfen: `document.documentElement.setAttribute('data-theme','dark')`), Bedienung per Touch (Wischen/Tippen/Buttons mit `.touch-only`) prüfen, z. B. im Responsive-Modus der Browser-Dev-Tools.
 8. Im Browser prüfen: per `file://` und `python -m http.server`, keine Konsolenfehler, keine Netzwerkanfragen.
 9. Commit: `add <id>`. Das kit-Manifest `games/<id>.yaml` entsteht beim Release (`node tools/update-catalog.mjs --tag <Tag>`, siehe CLAUDE.md Regel 10); bis dahin warnt `tools/check.mjs` nur.
+10. Tracking: `track()` ist in `template/game.js` enthalten; `game_start`/`game_end` (oder `level_start`/`level_end`) dort aufrufen, wo eine Runde beginnt und endet, und die Events in `docs/tracking.md` ergänzen.

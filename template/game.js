@@ -55,6 +55,17 @@ if (typeof document !== "undefined") {
   if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
   if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
+  // --- Telemetry: opt-in through the game library (it sets kit-games:consent and uploads the queue); without it nothing is stored ---
+  // Call track("game_start") / track("game_end", { outcome, score, ... }) where a round begins and ends (docs/tracking.md).
+  function track(event, props) {
+    try {
+      if (localStorage.getItem("kit-games:consent") !== "granted") return;
+      const queue = JSON.parse(localStorage.getItem("kit-games:events") || "[]");
+      queue.push({ event, properties: { game: GAME_ID, ...props }, timestamp: new Date().toISOString() });
+      localStorage.setItem("kit-games:events", JSON.stringify(queue.slice(-500)));
+    } catch (e) { /* storage blocked */ }
+  }
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const cell = canvas.width / SIZE;
