@@ -10,11 +10,12 @@
 <body>
   <main>
     <h1>Match 3</h1>
+    <p id="info" class="hint"></p>
     <p class="hud">
       <span>Level <b id="level">1</b></span>
       <span>Moves <b id="moves">25</b></span>
       <span>Score <b id="score">0</b>/<span id="target">0</span></span>
-      <span id="cages-wrap" hidden>Cages <b id="cages">0</b></span>
+      <span id="objs-wrap" hidden><span id="objs"></span></span>
       <span>Best <b id="best">0</b></span>
     </p>
     <div id="board">
@@ -31,16 +32,28 @@
         <button id="levels-btn" type="button">Levels</button>
       </p>
       <p id="msg" class="hint">&nbsp;</p>
-      <p class="hint kbd-hint">Click/drag to swap · arrows + Space · 1/2/3 powerups · H hint · L levels · R retry</p>
+      <p class="hint kbd-hint">Click/drag to swap · arrows + Space · 1/2/3 powerups · T portal jump · H hint · L levels · R retry</p>
       <p class="hint touch-only">Drag a gem or tap two neighbours · tap the board to continue</p>
     </div>
+    <section id="diff" hidden>
+      <h2>Choose a difficulty</h2>
+      <p class="hint">The difficulty sets the number of gem colours, the moves and how many obstacles a level has. Every difficulty has its own progress and powerups.</p>
+      <div id="diff-list" class="diff-list"></div>
+    </section>
     <section id="levels" hidden>
       <h2>Levels</h2>
+      <p class="hint">Difficulty: <b id="diff-name"></b> <button id="btn-diff" type="button">Change</button></p>
+      <p class="hint">Powerups: <span id="stock"></span></p>
       <p><button id="endless" type="button">&infin; Endless</button> <button id="help-btn" type="button">How to play</button></p>
-      <h3>World 1 - Classic</h3>
+      <div class="worldbar">
+        <button id="w-prev" type="button" aria-label="Previous world">&lsaquo;</button>
+        <div>
+          <h3 id="w-title"></h3>
+          <p id="w-sub" class="hint"></p>
+        </div>
+        <button id="w-next" type="button" aria-label="Next world">&rsaquo;</button>
+      </div>
       <div id="grid"></div>
-      <h3>World 2 - Walls &amp; Cages</h3>
-      <div id="grid2"></div>
       <p class="hint">Progress is saved in this browser.</p>
       <p><button id="levels-close" type="button">Back to game (Esc)</button></p>
     </section>

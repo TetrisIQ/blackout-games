@@ -2,35 +2,92 @@
 const GAME_ID = "match3";
 const W = 8;
 const H = 8;
-const TYPES = 6; // most gem types a level can use
+const TYPES = 10; // most gem types a level can use (Extreme goes up to 10)
 const COLOR = -1; // type of a colour gem; it never matches on its own
 const ROCK = -2; // type of a blocked cell: never moves, never clears
-const WORLD_SIZE = 100;
-const MAX_LEVEL = 200; // world 1 (classic) + world 2 (walls and cages)
+const FRUIT = -3; // an ingredient: falls to the bottom row and is collected there, never matches or clears
+const FRUIT_POINTS = 100; // per collected fruit
+const FRUIT_SPAWN = 0.1; // chance that a refill gem is one of the fruits still waiting
+const WORLD_SIZE = 30;
+// Every world after the first adds one new element; each world uses only its own.
+const WORLDS = [
+  { id: "classic", name: "Classic", tip: "Classic match 3 with special gems." },
+  { id: "rocks", name: "Rocks", tip: "Rocks block cells: nothing moves or falls through them." },
+  { id: "cages", name: "Cages", tip: "Caged gems are locked. Clear them or a neighbour to break the cage." },
+  { id: "ice", name: "Ice", tip: "Ice lies under gems. Clear a gem on the ice to crack it; all ice has to go." },
+  { id: "conveyor", name: "Conveyors", tip: "Conveyor rows slide one cell after every move, and the arrows show where." },
+  { id: "slime", name: "Slime", tip: "Slime spreads after every move that does not clear any. Clear gems on it." },
+  { id: "portal", name: "Portals", tip: "The gems on two linked portals can be swapped, however far apart they are." },
+  { id: "timer", name: "Countdown", tip: "Bomb gems count down with every move. Match them before they hit 0." },
+  { id: "fruit", name: "Fruit", tip: "Bring every fruit down to the bottom row by clearing the gems below it." },
+  { id: "fog", name: "Fog", tip: "Fog hides gems. It lifts when a gem on it or next to it clears." },
+];
+const MAX_LEVEL = WORLDS.length * WORLD_SIZE; // 300
 const BONUS_PER_MOVE = 50;
 const FINALE_BONUS = 100; // per special gem fired when a level ends
 const FINALE_MAX = 50; // safety limit for chains of new specials
 const POWERUPS = ["hammer", "bomb", "rainbow"]; // earned in endless mode, usable everywhere
 const AWARD_CHANCE = 0.5; // per combo of 4+ gems in endless mode
 const POWERUP_WEIGHTS = { hammer: 55, bomb: 30, rainbow: 15 }; // which powerup an award is: common to rare
-const TARGET_BASE = 1100;
-const TARGET_STEP = 18;
-const TARGET_CURVE = 0;
+const TARGET_BASE = 1000;
+const TARGET_STEP = 40; // per level inside a world
+const TARGET_WORLD = 30; // extra per world
+
+// Difficulty: gem colours (Extreme grows from `types` to `maxTypes` inside every world), moves and goal factors,
+// and how many obstacles a level has. Every difficulty keeps its own progress and powerups.
+const DIFFICULTIES = [
+  { id: "easy", label: "Easy", types: 5, maxTypes: 5, moves: 1.2, target: 0.8, obstacles: 0.7, text: "5 colours, more moves, fewer obstacles" },
+  { id: "medium", label: "Medium", types: 6, maxTypes: 6, moves: 1, target: 1, obstacles: 1, text: "6 colours, the classic balance" },
+  { id: "hard", label: "Hard", types: 7, maxTypes: 7, moves: 1.2, target: 0.85, obstacles: 1.1, text: "7 colours and more obstacles" },
+  { id: "extreme", label: "Extreme", types: 8, maxTypes: 10, moves: 1.5, target: 0.7, obstacles: 1.2, text: "8 colours, up to 10 at the end of each world" },
+];
+const difficultyOf = (id) => DIFFICULTIES.find((d) => d.id === id) || DIFFICULTIES[1];
+const typesFor = (d, i) => d.types + Math.round(((d.maxTypes - d.types) * i) / (WORLD_SIZE - 1));
 
 // --- Logic (no DOM; testable with node) ---------------------------------
-// A gem is { t: type 0..TYPES-1 (or COLOR / ROCK), s: null | "row" | "col" | "blast" | "color" | "rock", c: cage hits left }.
+// A gem is { t: type 0..TYPES-1 (or COLOR / ROCK / FRUIT), s: null | "row" | "col" | "blast" | "color" | "rock", c: cage hits left,
+// k: bomb countdown (0 = no bomb) }.
 // Rocks and caged gems are fixed: they cannot be swapped and do not fall. A cage takes a hit whenever its gem or a
 // neighbouring cell clears (match, special or powerup) and breaks after c hits; the gem is then a normal gem.
 // Cells are addressed as flat indexes y * W + x inside sets; positions are { x, y }.
+// Per-cell layers live next to the board: state.ice (hits left), state.slime, state.fog. Portals and conveyors are
+// part of the level layout.
 
-const gem = (t, s = null, c = 0) => ({ t, s, c });
+const gem = (t, s = null, c = 0, k = 0) => ({ t, s, c, k });
 const isRock = (g) => !!g && g.t === ROCK;
+const isInert = (g) => !!g && (g.t === ROCK || g.t === FRUIT); // never cleared by a match, special or powerup
 const isFixed = (g) => !!g && (g.t === ROCK || g.c > 0);
 const idx = (x, y) => y * W + x;
 const at = (i) => ({ x: i % W, y: Math.floor(i / W) });
 const inBoard = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
-const cloneBoard = (b) => b.map((r) => r.map((c) => c && { t: c.t, s: c.s, c: c.c || 0 }));
+const cloneBoard = (b) => b.map((r) => r.map((c) => c && { t: c.t, s: c.s, c: c.c || 0, k: c.k || 0 }));
 const cagesLeft = (b) => b.flat().filter((g) => g && g.c > 0).length;
+const grid = (fill) => Array.from({ length: H }, () => Array(W).fill(fill));
+const countCells = (g) => (g ? g.flat().filter(Boolean).length : 0);
+const snapOver = (s) => ({ ice: s.ice ? s.ice.map((r) => r.slice()) : null, slime: s.slime ? s.slime.map((r) => r.slice()) : null, fog: s.fog ? s.fog.map((r) => r.slice()) : null });
+
+// What is left to do besides the score: cages, ice cells, slime cells, bombs and fruits (on the board or still to come).
+function objectives(state) {
+  const cells = state.board.flat().filter(Boolean);
+  return {
+    cages: cells.filter((g) => g.c > 0).length,
+    ice: state.ice ? state.ice.flat().filter((v) => v > 0).length : 0,
+    slime: countCells(state.slime),
+    bombs: cells.filter((g) => g.k > 0).length + (state.exploded ? 1 : 0),
+    fruit: cells.filter((g) => g.t === FRUIT).length + (state.fruitQueue || 0),
+  };
+}
+const goalsMet = (state) => state.score >= state.target && Object.values(objectives(state)).every((n) => n === 0);
+
+// Portals: [x1, y1, x2, y2]; the gems on both ends can be swapped even though they are not neighbours.
+const linkedCells = (layout, a, b) => !!layout && (layout.portals || []).some(([x1, y1, x2, y2]) => (a.x === x1 && a.y === y1 && b.x === x2 && b.y === y2) || (a.x === x2 && a.y === y2 && b.x === x1 && b.y === y1));
+function portalPartner(layout, p) {
+  for (const [x1, y1, x2, y2] of (layout && layout.portals) || []) {
+    if (p.x === x1 && p.y === y1) return { x: x2, y: y2 };
+    if (p.x === x2 && p.y === y2) return { x: x1, y: y1 };
+  }
+  return null;
+}
 
 // World 2 layouts: rock patterns (cells that are blocked) ...
 const PATTERNS = [
@@ -59,34 +116,71 @@ function matchWindows(x, y, blocked) {
   return n;
 }
 
-// ... plus cages on free cells. Deterministic per level; i = 0..99 within the world.
+const emptyLayout = () => ({ rocks: [], cages: [], ice: [], slime: [], fog: [], conveyors: [], portals: [], timers: [], fruitCells: [], fruits: 0 });
+
+// Level layouts, deterministic per world, level and difficulty. i = 0..WORLD_SIZE-1 within the world.
 const layoutCache = new Map();
-function makeLayout(i) {
-  if (layoutCache.has(i)) return layoutCache.get(i);
-  const cells = new Set(PATTERNS[i % PATTERNS.length].map(([x, y]) => idx(x, y)));
-  if (i >= 50) for (const [x, y] of PATTERNS[(i * 5 + 3) % PATTERNS.length]) cells.add(idx(x, y));
-  const rnd = seeded(1000 + i);
-  const candidates = [];
-  for (let n = 0; n < W * H; n++) if (!cells.has(n)) candidates.push(n);
-  for (let k = candidates.length - 1; k > 0; k--) {
-    const j = Math.floor(rnd() * (k + 1));
-    [candidates[k], candidates[j]] = [candidates[j], candidates[k]];
+function makeLayout(world, i, d) {
+  const key = `${world}:${i}:${d.id}`;
+  if (layoutCache.has(key)) return layoutCache.get(key);
+  const L = emptyLayout();
+  const rnd = seeded(1000 + world * 977 + i * 31 + DIFFICULTIES.indexOf(d) * 10007);
+  const scale = (n) => Math.round(n * d.obstacles);
+  const shuffled = (list) => {
+    const a = [...list];
+    for (let k = a.length - 1; k > 0; k--) {
+      const j = Math.floor(rnd() * (k + 1));
+      [a[k], a[j]] = [a[j], a[k]];
+    }
+    return a;
+  };
+  const allCells = Array.from({ length: W * H }, (_, n) => n);
+  const xy = (n) => [n % W, Math.floor(n / W)];
+  const id = WORLDS[world].id;
+  if (id === "rocks") {
+    const cells = new Set(PATTERNS[i % PATTERNS.length].map(([x, y]) => idx(x, y)));
+    if (i >= [20, 15, 10, 6][DIFFICULTIES.indexOf(d)]) for (const [x, y] of PATTERNS[(i * 5 + 3) % PATTERNS.length]) cells.add(idx(x, y));
+    L.rocks = [...cells].map(xy);
+  } else if (id === "cages") {
+    const count = Math.min(20, scale(2 + i * 0.45));
+    const chosen = [];
+    for (const n of shuffled(allCells)) {
+      if (chosen.length >= count) break;
+      const next = [...chosen, n];
+      // every cage (old and new) keeps at least 2 windows free of the other cages
+      if (next.every((c) => matchWindows(c % W, Math.floor(c / W), new Set(next.filter((o) => o !== c))) >= 2)) chosen.push(n);
+    }
+    L.cages = chosen.map((n, k) => [...xy(n), (i >= 20 && k % 2 === 0) || (i >= 10 && k % 3 === 0) ? 2 : 1]);
+  } else if (id === "ice") {
+    L.ice = shuffled(allCells).slice(0, Math.min(30, scale(5 + i * 0.7))).map((n, k) => [...xy(n), (i >= 22 && k % 2 === 0) || (i >= 12 && k % 3 === 0) ? 2 : 1]);
+  } else if (id === "conveyor") {
+    const rows = shuffled([...Array(H).keys()]).slice(0, Math.max(1, Math.min(4, scale(1 + i / 10))));
+    L.conveyors = rows.map((y, k) => ({ y, dir: k % 2 ? -1 : 1 }));
+  } else if (id === "slime") {
+    L.slime = shuffled(allCells).slice(0, Math.min(12, scale(2 + i * 0.2))).map(xy);
+  } else if (id === "portal") {
+    const pairs = Math.max(1, Math.min(4, scale(1 + i / 10)));
+    const used = new Set();
+    for (let p = 0; p < pairs; p++) {
+      const a = shuffled(allCells.filter((n) => !used.has(n)))[0];
+      const far = allCells.filter((n) => !used.has(n) && n !== a && Math.max(Math.abs((n % W) - (a % W)), Math.abs(Math.floor(n / W) - Math.floor(a / W))) >= 3);
+      const b = shuffled(far)[0];
+      used.add(a);
+      used.add(b);
+      L.portals.push([...xy(a), ...xy(b)]);
+    }
+  } else if (id === "timer") {
+    const count = Math.max(1, Math.min(6, scale(1 + i / 9)));
+    const start = 16 - Math.floor(i / 5) - (d.id === "extreme" ? 1 : 0);
+    L.timers = shuffled(allCells).slice(0, count).map((n, k) => [...xy(n), start + (k % 2) * 2]);
+  } else if (id === "fruit") {
+    L.fruits = Math.max(2, Math.min(6, scale(2 + i / 10)));
+    L.fruitCells = shuffled(allCells.filter((n) => n >= W * (5 - Math.floor(i / 10)) && n < W * (7 - Math.floor(i / 10)))).slice(0, Math.min(L.fruits, 4)).map(xy);
+  } else if (id === "fog") {
+    L.fog = shuffled(allCells).slice(0, Math.min(44, scale(12 + i * 1.1))).map(xy);
   }
-  const count = i < 5 ? 0 : Math.min(20, 2 + Math.floor((i - 5) / 5));
-  const chosen = [];
-  for (const n of candidates) {
-    if (chosen.length >= count) break;
-    const next = [...chosen, n];
-    // every cage (old and new) keeps at least 2 windows free of rocks and of the other cages
-    if (next.every((c) => matchWindows(c % W, Math.floor(c / W), new Set([...cells, ...next.filter((o) => o !== c)])) >= 2)) chosen.push(n);
-  }
-  const cages = chosen.map((n, k) => {
-    const hp = (i >= 70 && k % 2 === 0) || (i >= 30 && k % 3 === 0) ? 2 : 1;
-    return [n % W, Math.floor(n / W), hp];
-  });
-  const layout = { rocks: [...cells].map((n) => [n % W, Math.floor(n / W)]), cages };
-  layoutCache.set(i, layout);
-  return layout;
+  layoutCache.set(key, L);
+  return L;
 }
 
 // Small seeded PRNG so layouts are the same every time.
@@ -99,20 +193,23 @@ function seeded(seed) {
   };
 }
 
-// Difficulty grows with the level: fewer moves, higher goal. World 2 (levels 101+) adds rocks and cages;
-// all cages have to be broken as well as the score reached.
-function levelConfig(level) {
+// Extra moves a level gets for the work its obstacles make.
+function extraMoves(L) {
+  const hits = (list) => list.reduce((sum, c) => sum + (c[2] || 1), 0);
+  return Math.ceil(hits(L.cages) * 0.8 + hits(L.ice) * 0.6 + L.slime.length * 1.2 + L.fruits * 3 + L.timers.length * 2 + L.rocks.length * 0.5);
+}
+
+// Difficulty grows inside every world: fewer moves, a higher goal; the difficulty setting shifts colours, moves,
+// goals and obstacle counts. Levels are numbered 1..MAX_LEVEL, WORLD_SIZE per world.
+function levelConfig(level, difficulty = "medium") {
+  const d = difficultyOf(difficulty);
   const n = Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
-  if (n > WORLD_SIZE) {
-    const i = n - WORLD_SIZE - 1;
-    const layout = makeLayout(i);
-    const hits = layout.cages.reduce((sum, c) => sum + c[2], 0);
-    const moves = 22 + Math.ceil(hits * 0.8) - Math.floor(i / 20);
-    return { level: n, types: TYPES, moves, target: Math.round((800 + 14 * i) / 50) * 50, layout };
-  }
-  const moves = 22 - Math.floor((n - 1) / 16);
-  const target = Math.round((TARGET_BASE + TARGET_STEP * (n - 1) + TARGET_CURVE * (n - 1) * (n - 1)) / 50) * 50;
-  return { level: n, types: TYPES, moves, target, layout: { rocks: [], cages: [] } };
+  const world = Math.floor((n - 1) / WORLD_SIZE);
+  const i = (n - 1) % WORLD_SIZE;
+  const layout = makeLayout(world, i, d);
+  const moves = Math.round((24 - Math.floor(i / 8) + extraMoves(layout)) * d.moves);
+  const target = Math.round(((TARGET_BASE + TARGET_STEP * i + TARGET_WORLD * world) * d.target) / 50) * 50;
+  return { level: n, world, types: typesFor(d, i), moves, target, layout, difficulty: d.id };
 }
 
 // 3 stars with at least half the moves left, 2 with a quarter, else 1.
@@ -196,6 +293,12 @@ function expand(state, set) {
   }
 }
 
+// A refill gem: random colour, or one of the fruits still waiting to enter the board.
+function newGem(state) {
+  if (state.fruitQueue > 0 && state.random() < FRUIT_SPAWN) { state.fruitQueue--; return gem(FRUIT); }
+  return gem(Math.floor(state.random() * state.types));
+}
+
 // Gravity: gems fall down inside each column segment (between rocks / caged gems); new random gems fill
 // the top of every segment.
 function settle(state) {
@@ -209,9 +312,23 @@ function settle(state) {
       top++;
       const col = [];
       for (let r = y; r >= top; r--) if (b[r][x]) col.push(b[r][x]);
-      for (let r = y, k = 0; r >= top; r--, k++) b[r][x] = k < col.length ? col[k] : gem(Math.floor(state.random() * state.types));
+      for (let r = y, k = 0; r >= top; r--, k++) b[r][x] = k < col.length ? col[k] : newGem(state);
       y = top - 1;
     }
+  }
+}
+
+// Fruits that have reached the bottom row are collected (each is worth FRUIT_POINTS); the rest falls on.
+function collectFruit(state, steps, cascade) {
+  for (;;) {
+    const got = [];
+    for (let x = 0; x < W; x++) if (state.board[H - 1][x] && state.board[H - 1][x].t === FRUIT) got.push({ x, y: H - 1 });
+    if (!got.length) return;
+    for (const p of got) state.board[p.y][p.x] = null;
+    const points = got.length * FRUIT_POINTS;
+    state.score += points;
+    settle(state);
+    steps.push({ cleared: got, created: [], points, cascade: 1, combos: 0, damaged: [], broken: [], fruit: got.length, board: cloneBoard(state.board), over: snapOver(state) });
   }
 }
 
@@ -232,9 +349,9 @@ function resolve(state, forced, prefs) {
     if (!clear.size) break;
     expand(state, clear);
     for (const c of creates) clear.delete(c.idx); // new specials survive
-    // Rocks never clear. A cage takes one hit per step when its gem or a neighbouring cell clears; when the
+    // Rocks and fruits never clear. A cage takes one hit per step when its gem or a neighbouring cell clears; when the
     // last hit lands the cage breaks (the gem clears if it was part of the clear, otherwise it is free).
-    for (const i of [...clear]) if (isRock(state.board[at(i).y][at(i).x])) clear.delete(i);
+    for (const i of [...clear]) if (isInert(state.board[at(i).y][at(i).x])) clear.delete(i);
     const damaged = [];
     const broken = [];
     const hit = [];
@@ -249,6 +366,13 @@ function resolve(state, forced, prefs) {
     for (const { x, y, c } of hit) {
       c.c--;
       if (c.c > 0) { clear.delete(idx(x, y)); damaged.push({ x, y, c: c.c }); } else broken.push({ x, y });
+    }
+    // Layers: ice cracks and slime goes where a gem clears; fog lifts around it.
+    for (const i of clear) {
+      const { x, y } = at(i);
+      if (state.ice && state.ice[y][x] > 0) state.ice[y][x]--;
+      if (state.slime && state.slime[y][x]) state.slime[y][x] = false;
+      if (state.fog) for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) if (inBoard(x + dx, y + dy)) state.fog[y + dy][x + dx] = false;
     }
     const points = clear.size * 10 * cascade;
     const cleared = [...clear].map(at);
@@ -265,7 +389,9 @@ function resolve(state, forced, prefs) {
       damaged,
       broken,
       board: cloneBoard(state.board),
+      over: snapOver(state),
     });
+    collectFruit(state, steps, cascade);
     prefs = [];
   }
   return steps;
@@ -289,6 +415,7 @@ function evaluateSwap(board, a, b) {
       for (let i = 0; i < W * H; i++) forced.add(i);
     } else {
       const other = colorA ? gb : ga;
+      if (other.t === FRUIT) return { valid: false }; // a colour gem has nothing to clear on a fruit
       for (const row of bd) {
         for (const g of row) {
           if (g.t !== other.t || g.s === "color") continue;
@@ -310,8 +437,8 @@ function isValidSwap(board, a, b) {
   return evaluateSwap(board, a, b).valid;
 }
 
-// First valid move ([a, b]) or null.
-function findMove(board) {
+// First valid move ([a, b]) or null. `layout` adds the portal swaps.
+function findMove(board, layout) {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       for (const [dx, dy] of [[1, 0], [0, 1]]) {
@@ -321,6 +448,9 @@ function findMove(board) {
         if (isValidSwap(board, a, b)) return [a, b];
       }
     }
+  }
+  for (const [x1, y1, x2, y2] of (layout && layout.portals) || []) {
+    if (isValidSwap(board, { x: x1, y: y1 }, { x: x2, y: y2 })) return [{ x: x1, y: y1 }, { x: x2, y: y2 }];
   }
   return null;
 }
@@ -343,13 +473,15 @@ function createBoard(random = Math.random, types = TYPES, layout = { rocks: [], 
       b.push(row);
     }
     for (const [x, y, hp] of layout.cages) b[y][x].c = hp;
-    if (findMove(b)) return b;
+    for (const [x, y] of layout.fruitCells || []) b[y][x] = gem(FRUIT);
+    for (const [x, y, k] of layout.timers || []) b[y][x].k = k;
+    if (findMove(b, layout)) return b;
   }
 }
 
-// `inventory` = powerups carried over from earlier sessions.
-function createState(random = Math.random, level = 1, inventory = {}) {
-  const state = { random, status: "play" };
+// `inventory` = powerups carried over from earlier sessions (kept per difficulty).
+function createState(random = Math.random, level = 1, inventory = {}, difficulty = "medium") {
+  const state = { random, status: "play", difficulty: difficultyOf(difficulty).id };
   state.powerups = Object.fromEntries(POWERUPS.map((p) => [p, Math.max(0, Math.floor(Number(inventory[p])) || 0)]));
   startLevel(state, level);
   return state;
@@ -357,7 +489,7 @@ function createState(random = Math.random, level = 1, inventory = {}) {
 
 // (Re)starts a level: fresh board, full moves, score 0.
 function startLevel(state, level) {
-  const cfg = levelConfig(level);
+  const cfg = levelConfig(level, state.difficulty);
   state.level = cfg.level;
   state.types = cfg.types;
   state.moves = cfg.moves;
@@ -369,6 +501,14 @@ function startLevel(state, level) {
   state.powerups ??= { hammer: 0, bomb: 0, rainbow: 0 }; // the inventory survives level changes
   state.status = "play";
   state.layout = cfg.layout;
+  state.ice = grid(0);
+  for (const [x, y, hp] of cfg.layout.ice) state.ice[y][x] = hp;
+  state.slime = grid(false);
+  for (const [x, y] of cfg.layout.slime) state.slime[y][x] = true;
+  state.fog = grid(false);
+  for (const [x, y] of cfg.layout.fog) state.fog[y][x] = true;
+  state.fruitQueue = Math.max(0, cfg.layout.fruits - cfg.layout.fruitCells.length);
+  state.exploded = null;
   state.board = createBoard(state.random, cfg.types, cfg.layout);
   return state;
 }
@@ -386,16 +526,16 @@ function startEndless(state) {
 
 // Shuffles the board if no valid move is left. Returns true if it had to.
 function ensurePlayable(state) {
-  if (findMove(state.board)) return false;
+  if (findMove(state.board, state.layout)) return false;
   shuffle(state);
   return true;
 }
 
 // Reshuffles the existing gems until there are no matches and a move exists.
 function shuffle(state) {
-  // Only free gems move; rocks and caged gems stay where they are.
+  // Only free gems move; rocks, caged gems and fruits stay where they are.
   const free = [];
-  state.board.forEach((row, y) => row.forEach((g, x) => { if (g && !isFixed(g)) free.push({ x, y }); }));
+  state.board.forEach((row, y) => row.forEach((g, x) => { if (g && !isFixed(g) && g.t !== FRUIT) free.push({ x, y }); }));
   for (let n = 0; n < 200; n++) {
     const gems = free.map((p) => state.board[p.y][p.x]);
     for (let i = gems.length - 1; i > 0; i--) {
@@ -404,7 +544,7 @@ function shuffle(state) {
     }
     const b = cloneBoard(state.board);
     free.forEach((p, k) => { b[p.y][p.x] = gems[k]; });
-    if (!findGroups(b).length && findMove(b)) { state.board = b; return; }
+    if (!findGroups(b).length && findMove(b, state.layout)) { state.board = b; return; }
   }
   state.board = createBoard(state.random, state.types, state.layout);
 }
@@ -456,25 +596,77 @@ function finale(state) {
   return rounds;
 }
 
-// Plays a swap. Invalid swaps change nothing. Returns { valid, start, steps, shuffled, bonus }.
+// Conveyor rows slide one cell (wrapping round); they never hold rocks or cages.
+function conveyorShift(state) {
+  for (const { y, dir } of state.layout.conveyors) {
+    const row = state.board[y];
+    if (dir > 0) row.unshift(row.pop());
+    else row.push(row.shift());
+  }
+}
+
+// Slime grows into one random free neighbour cell. Returns its position or null.
+function spreadSlime(state) {
+  const next = new Set();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!state.slime[y][x]) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (inBoard(x + dx, y + dy) && !state.slime[y + dy][x + dx] && !isRock(state.board[y + dy][x + dx])) next.add(idx(x + dx, y + dy));
+      }
+    }
+  }
+  if (!next.size) return null;
+  const cells = [...next];
+  const p = at(cells[Math.floor(state.random() * cells.length)]);
+  state.slime[p.y][p.x] = true;
+  return p;
+}
+
+// Every bomb gem counts one down. Returns the first one that reaches 0 (the level is lost) or null.
+function tickBombs(state) {
+  let boom = null;
+  state.board.forEach((row, y) => row.forEach((c, x) => {
+    if (!c || !(c.k > 0)) return;
+    c.k--;
+    if (c.k === 0 && !boom) boom = { x, y };
+  }));
+  return boom;
+}
+
+// Plays a swap. Invalid swaps change nothing. Returns { valid, start, steps, shuffled, bonus, ... }; conveyor, slime
+// and exploded describe what the move set off afterwards.
 function trySwap(state, a, b) {
   const none = { valid: false, steps: [], shuffled: false, bonus: 0, awards: [] };
   if (state.status !== "play") return none;
-  if (!inBoard(a.x, a.y) || !inBoard(b.x, b.y) || Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) return none;
+  if (!inBoard(a.x, a.y) || !inBoard(b.x, b.y)) return none;
+  if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1 && !linkedCells(state.layout, a, b)) return none;
   const info = evaluateSwap(state.board, a, b);
   if (!info.valid) return none;
   state.board = info.board;
   state.movesLeft--;
   const start = cloneBoard(state.board);
+  const startOver = snapOver(state);
+  const slimeBefore = countCells(state.slime);
   const steps = resolve(state, info.forced, [idx(a.x, a.y), idx(b.x, b.y)]);
+  let conveyor = null;
+  if (state.layout && state.layout.conveyors && state.layout.conveyors.length) {
+    conveyorShift(state);
+    const board = cloneBoard(state.board);
+    conveyor = { rows: state.layout.conveyors, board, steps: resolve(state, null, []) };
+  }
+  // grows (every other time) when the move cleared no slime
+  const slime = slimeBefore > 0 && countCells(state.slime) >= slimeBefore && state.random() < 0.5 ? spreadSlime(state) : null;
+  const exploded = tickBombs(state);
+  if (exploded) state.exploded = exploded;
   const shuffled = ensurePlayable(state);
   let bonus = 0;
-  if (state.score >= state.target && cagesLeft(state.board) === 0) {
+  if (goalsMet(state)) {
     bonus = state.movesLeft * BONUS_PER_MOVE;
     state.score += bonus;
     state.status = "levelclear";
     state.stars = starsFor(state.movesLeft, state.moves);
-  } else if (state.movesLeft <= 0) {
+  } else if (state.movesLeft <= 0 || exploded) {
     state.status = "over";
   }
   const board = cloneBoard(state.board); // what the player sees before the finale starts
@@ -482,13 +674,13 @@ function trySwap(state, a, b) {
   if (state.status !== "play") {
     rounds = finale(state);
     // A finale that lifts the score over the goal (with all cages gone) still saves the level.
-    if (state.status === "over" && state.score >= state.target && cagesLeft(state.board) === 0) {
+    if (state.status === "over" && goalsMet(state)) {
       state.status = "levelclear";
       state.stars = starsFor(0, state.moves);
     }
   }
   const awards = awardPowerups(state, steps);
-  return { valid: true, start, steps, shuffled, bonus, awards, board, finale: rounds };
+  return { valid: true, start, startOver, steps, conveyor, slime, exploded, shuffled, bonus, awards, board, finale: rounds };
 }
 
 // Uses a powerup on the gem at pos (any mode, costs no move):
@@ -496,7 +688,7 @@ function trySwap(state, a, b) {
 function usePowerup(state, type, pos) {
   const none = { valid: false, steps: [], shuffled: false, bonus: 0, awards: [] };
   if (state.status !== "play" || !POWERUPS.includes(type) || !(state.powerups[type] > 0)) return none;
-  if (!inBoard(pos.x, pos.y) || !state.board[pos.y][pos.x] || isRock(state.board[pos.y][pos.x])) return none;
+  if (!inBoard(pos.x, pos.y) || !state.board[pos.y][pos.x] || isInert(state.board[pos.y][pos.x])) return none;
   const target = state.board[pos.y][pos.x];
   if (type === "rainbow" && target.t < 0) return none;
   const forced = new Set();
@@ -508,10 +700,11 @@ function usePowerup(state, type, pos) {
   }
   state.powerups[type]--;
   const start = cloneBoard(state.board);
+  const startOver = snapOver(state);
   const steps = resolve(state, forced, []);
   const shuffled = ensurePlayable(state);
   const awards = awardPowerups(state, steps);
-  return { valid: true, start, steps, shuffled, bonus: 0, awards, powerup: true };
+  return { valid: true, start, startOver, steps, shuffled, bonus: 0, awards, powerup: true };
 }
 
 function nextLevel(state) {
@@ -522,7 +715,7 @@ function nextLevel(state) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    W, H, TYPES, COLOR, ROCK, WORLD_SIZE, MAX_LEVEL, cagesLeft, isFixed, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, FINALE_BONUS, finale, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
+    W, H, TYPES, COLOR, ROCK, FRUIT, FRUIT_POINTS, WORLD_SIZE, WORLDS, MAX_LEVEL, DIFFICULTIES, difficultyOf, emptyLayout, objectives, goalsMet, linkedCells, portalPartner, conveyorShift, spreadSlime, cagesLeft, isFixed, gem, idx, levelConfig, starsFor, POWERUPS, POWERUP_WEIGHTS, AWARD_CHANCE, FINALE_BONUS, finale, pickPowerup, usePowerup, startLevel, startEndless, ensurePlayable, cloneBoard, findGroups, evaluateSwap, isValidSwap,
     findMove, createBoard, createState, shuffle, trySwap, nextLevel,
   };
 }
@@ -539,7 +732,7 @@ if (typeof document !== "undefined") {
 
   function readPalette() {
     const cs = getComputedStyle(root);
-    for (const k of ["board", "line", "text", "muted", "accent", "overlay", "cell-a", "cell-b", "cage", "bg"]) PAL[k] = cs.getPropertyValue(`--${k}`).trim();
+    for (const k of ["board", "line", "text", "muted", "accent", "overlay", "cell-a", "cell-b", "cage", "fog", "bg"]) PAL[k] = cs.getPropertyValue(`--${k}`).trim();
   }
 
   let lastAuto = root.hasAttribute("data-theme-auto") ? root.getAttribute("data-theme") : null; // set by the page's head script
@@ -557,6 +750,16 @@ if (typeof document !== "undefined") {
   if (systemDark && systemDark.addEventListener) systemDark.addEventListener("change", () => { autoTheme(); readPalette(); });
   if (typeof MutationObserver !== "undefined") new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 
+  // --- Telemetry: opt-in through the game library (it sets kit-games:consent and uploads the queue); without it nothing is stored ---
+  function track(event, props) {
+    try {
+      if (localStorage.getItem("kit-games:consent") !== "granted") return;
+      const queue = JSON.parse(localStorage.getItem("kit-games:events") || "[]");
+      queue.push({ event, properties: { game: GAME_ID, ...props }, timestamp: new Date().toISOString() });
+      localStorage.setItem("kit-games:events", JSON.stringify(queue.slice(-500)));
+    } catch (e) { /* storage blocked */ }
+  }
+
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
   const cell = canvas.width / W;
@@ -564,30 +767,50 @@ if (typeof document !== "undefined") {
   let animSpeed = 1; // debug: 0 = instant
   const touchOnly = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const progressKey = `${GAME_ID}:progress`;
-  const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22"];
+  const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22", "#1abc9c", "#fd79a8", "#8d6e63", "#c0ca33"];
+  const PORTAL_COLORS = ["#00bcd4", "#ff4081", "#8bc34a", "#ffa000"];
   const reduced = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // Saved progress: { unlocked: highest reachable level, endlessBest, powerups (inventory), stars: {level: 1-3}, best: {level: best score} }.
+  // Saved progress: { v: 2, difficulty (last chosen), helpSeen, byDiff: { <difficulty>: { unlocked: highest reachable level,
+  // endlessBest, powerups (inventory), stars: {level: 1-3}, best: {level: best score} } } }. Every difficulty has its own.
+  const blankProgress = () => ({ unlocked: 1, endlessBest: 0, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} });
+
   function loadProgress() {
+    const out = { v: 2, difficulty: null, helpSeen: false, byDiff: Object.fromEntries(DIFFICULTIES.map((d) => [d.id, blankProgress()])) };
     try {
       const p = JSON.parse(localStorage.getItem(progressKey));
       if (p && typeof p === "object") {
-        return {
-          unlocked: Math.min(MAX_LEVEL, Math.max(1, Math.floor(Number(p.unlocked)) || 1)),
-          endlessBest: Math.max(0, Number(p.endlessBest) || 0),
-          helpSeen: !!p.helpSeen,
-          powerups: Object.fromEntries(POWERUPS.map((k) => [k, Math.max(0, Math.floor(Number(p.powerups && p.powerups[k])) || 0)])),
-          stars: p.stars && typeof p.stars === "object" ? p.stars : {},
-          best: p.best && typeof p.best === "object" ? p.best : {},
-        };
+        out.helpSeen = !!p.helpSeen;
+        if (p.v === 2) { // saves from before the difficulties and the 10 worlds are not carried over
+          if (DIFFICULTIES.some((d) => d.id === p.difficulty)) out.difficulty = p.difficulty;
+          for (const d of DIFFICULTIES) {
+            const q = p.byDiff && p.byDiff[d.id];
+            if (!q || typeof q !== "object") continue;
+            out.byDiff[d.id] = {
+              unlocked: Math.min(MAX_LEVEL, Math.max(1, Math.floor(Number(q.unlocked)) || 1)),
+              endlessBest: Math.max(0, Number(q.endlessBest) || 0),
+              powerups: Object.fromEntries(POWERUPS.map((k) => [k, Math.max(0, Math.floor(Number(q.powerups && q.powerups[k])) || 0)])),
+              stars: q.stars && typeof q.stars === "object" ? q.stars : {},
+              best: q.best && typeof q.best === "object" ? q.best : {},
+            };
+          }
+        }
       }
     } catch (e) { /* corrupt or missing: start fresh */ }
-    return { unlocked: 1, endlessBest: 0, helpSeen: false, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} };
+    return out;
   }
 
   const progress = loadProgress();
-  let state = createState(Math.random, progress.unlocked, progress.powerups); // continue at the highest level reached
+  let difficulty = progress.difficulty || "medium";
+  let prog = progress.byDiff[difficulty]; // progress of the chosen difficulty
+  function saveProgress() {
+    progress.difficulty = difficulty;
+    try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* storage full or blocked */ }
+  }
+  let state = createState(Math.random, prog.unlocked, prog.powerups, difficulty); // continue at the highest level reached
   let sprites = [];
+  let view = snapOver(state); // ice, slime and fog as the animation shows them
+  let menuWorld = 0;
   let particles = [];
   let popups = [];
   let shake = 0;
@@ -603,6 +826,32 @@ if (typeof document !== "undefined") {
   const LABELS = { hammer: "Hammer", bomb: "Bomb", rainbow: "Rainbow" };
   let shownScore = 0;
   let targetScore = 0;
+
+  // --- Telemetry per level: level_start, then one level_end (won / lost / abandoned) ---
+  // `run` is a snapshot, because the state is replaced when the next level starts.
+  let run = null;
+  const run0 = () => ({ level: state.level, difficulty: state.difficulty, mode: state.endless ? "endless" : "level", moves: isFinite(state.moves) ? state.moves : null, target: isFinite(state.target) ? state.target : null,
+    score: 0, movesLeft: isFinite(state.moves) ? state.moves : null, active: 0, swaps: 0, invalid: 0, hints: 0, shuffles: 0, awards: 0, used: { hammer: 0, bomb: 0, rainbow: 0 } });
+
+  function startRun() {
+    endRun("abandoned");
+    run = run0();
+    track("level_start", { level: run.level, difficulty: run.difficulty, world: run.level ? worldOf(run.level) + 1 : 0, mode: run.mode, moves: run.moves, target: run.target, tile_types: state.types, hammer: state.powerups.hammer, bomb: state.powerups.bomb, rainbow: state.powerups.rainbow });
+  }
+
+  function endRun(outcome, extra = {}) {
+    if (!run) return;
+    const r = run;
+    run = null;
+    track("level_end", {
+      level: r.level, difficulty: r.difficulty, world: r.level ? worldOf(r.level) + 1 : 0, mode: r.mode, outcome, ...extra,
+      stars: outcome === "won" ? state.stars : 0,
+      moves: r.moves, moves_used: r.moves === null ? r.swaps : r.moves - r.movesLeft, score: r.score, target: r.target,
+      active_s: Math.round(r.active * 10) / 10,
+      swaps: r.swaps, invalid_swaps: r.invalid, hints: r.hints, auto_shuffles: r.shuffles, awards: r.awards,
+      used_hammer: r.used.hammer, used_bomb: r.used.bomb, used_rainbow: r.used.rainbow,
+    });
+  }
 
   // --- animation helpers ---
   const easeOut = (t) => 1 - (1 - t) * (1 - t);
@@ -632,10 +881,14 @@ if (typeof document !== "undefined") {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (board[y][x]) sprites.push({ g: board[y][x], x, y, sc: 1, al: 1, flash: 0 });
   }
 
+  function setView(over) {
+    view = over || snapOver(state);
+  }
+
   const spriteAt = (x, y) => sprites.find((s) => Math.round(s.x) === x && Math.round(s.y) === y);
 
   function burst(x, y, g) {
-    const color = g.t === COLOR ? "#fff" : COLORS[g.t];
+    const color = g.t < 0 ? "#fff" : COLORS[g.t];
     for (let k = 0; k < 7; k++) {
       const a = Math.random() * Math.PI * 2;
       const v = (1.5 + Math.random() * 3.5) * cell;
@@ -649,6 +902,7 @@ if (typeof document !== "undefined") {
 
   // New board: gems drop in from above, column by column.
   async function intro() {
+    setView();
     setBoard(state.board);
     const falling = sprites.filter((s) => !isRock(s.g)); // rocks are just there
     const start = new Map(falling.map((s) => [s, s.y]));
@@ -682,6 +936,7 @@ if (typeof document !== "undefined") {
       s.sc = 1.6;
     }
     const born = sprites.filter((s) => s.sc > 1);
+    if (step.over) setView(step.over); // ice cracks, slime goes and fog lifts as the gems clear
     for (const s of doomed) burst(s.x, s.y, s.g);
     // Cages: a hit that does not break the cage shakes it, a broken cage bursts into grey chips.
     const hurt = [];
@@ -699,6 +954,7 @@ if (typeof document !== "undefined") {
       popup(cx, cy, `+${step.points}`, 18 + Math.min(14, step.cascade * 3));
     }
     if (step.cascade > 1) popup(W / 2 - 0.5, H / 2 - 0.5, `Cascade x${step.cascade}!`, 26);
+    if (step.fruit) say(`Fruit collected: +${step.points}`);
     if (step.cleared.length >= 8) shake = Math.max(shake, Math.min(10, step.cleared.length / 2));
     targetScore += step.points;
 
@@ -754,17 +1010,56 @@ if (typeof document !== "undefined") {
     await tween(300, (t) => { for (const s of movable()) s.sc = t; }, easeBack);
   }
 
+  // Conveyor rows slide one cell; the gem that leaves on one side comes back on the other.
+  async function conveyorAnim(conv) {
+    const dirs = new Map(conv.rows.map((r) => [r.y, r.dir]));
+    const moving = sprites.filter((s) => dirs.has(Math.round(s.y)));
+    const from = new Map(moving.map((s) => [s, s.x]));
+    say("The conveyors move");
+    await tween(280, (t) => {
+      for (const s of moving) {
+        const dir = dirs.get(Math.round(s.y));
+        s.x = from.get(s) + dir * t;
+        if ((dir > 0 && from.get(s) === W - 1) || (dir < 0 && from.get(s) === 0)) s.al = 1 - t;
+      }
+    }, easeInOut);
+    setBoard(conv.board);
+  }
+
   // --- drawing ---
   function shape(t, r) {
     ctx.beginPath();
+    const poly = (n, off = 0) => { for (let k = 0; k < n; k++) { const a = ((Math.PI * 2) / n) * k + off; ctx.lineTo(r * Math.cos(a), r * Math.sin(a)); } };
     if (t === 0) ctx.arc(0, 0, r, 0, Math.PI * 2);
     else if (t === 1) ctx.rect(-r, -r, r * 2, r * 2);
     else if (t === 2) { ctx.moveTo(0, -r); ctx.lineTo(r, r * 0.8); ctx.lineTo(-r, r * 0.8); }
     else if (t === 3) { ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0); }
-    else if (t === 4) for (let k = 0; k < 6; k++) { const a = (Math.PI / 3) * k; ctx.lineTo(r * Math.cos(a), r * Math.sin(a)); }
+    else if (t === 4) poly(6);
+    else if (t === 6) poly(5, -Math.PI / 2);
+    else if (t === 7) { const q = r * 0.38; ctx.moveTo(-q, -r); ctx.lineTo(q, -r); ctx.lineTo(q, -q); ctx.lineTo(r, -q); ctx.lineTo(r, q); ctx.lineTo(q, q); ctx.lineTo(q, r); ctx.lineTo(-q, r); ctx.lineTo(-q, q); ctx.lineTo(-r, q); ctx.lineTo(-r, -q); ctx.lineTo(-q, -q); }
+    else if (t === 8) poly(8, Math.PI / 8);
+    else if (t === 9) for (let k = 0; k < 8; k++) { const a = (Math.PI / 4) * k - Math.PI / 2; const rr = k % 2 ? r * 0.4 : r * 1.1; ctx.lineTo(rr * Math.cos(a), rr * Math.sin(a)); }
     else for (let k = 0; k < 10; k++) { const a = (Math.PI / 5) * k - Math.PI / 2; const rr = k % 2 ? r * 0.5 : r; ctx.lineTo(rr * Math.cos(a), rr * Math.sin(a)); }
     ctx.closePath();
     ctx.fill();
+  }
+
+  // Cherries: the fruit that has to reach the bottom row.
+  function drawFruit(r) {
+    ctx.strokeStyle = "#2e7d32";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.45, r * 0.3); ctx.quadraticCurveTo(-r * 0.2, -r * 0.9, r * 0.35, -r * 1.1);
+    ctx.moveTo(r * 0.5, r * 0.4); ctx.quadraticCurveTo(r * 0.5, -r * 0.6, r * 0.35, -r * 1.1);
+    ctx.stroke();
+    ctx.fillStyle = "#4caf50";
+    ctx.beginPath(); ctx.ellipse(r * 0.55, -r * 1.05, r * 0.4, r * 0.18, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#b71c1c";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    for (const [cx, cy] of [[-r * 0.45, r * 0.3], [r * 0.5, r * 0.4]]) {
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
   }
 
   function drawSprite(s, now) {
@@ -793,7 +1088,9 @@ if (typeof document !== "undefined") {
       ctx.restore();
       return;
     }
-    if (s.g.t === COLOR) {
+    if (s.g.t === FRUIT) {
+      drawFruit(r);
+    } else if (s.g.t === COLOR) {
       ctx.rotate(now / 600);
       ctx.fillStyle = `hsl(${(now / 6) % 360}, 85%, 62%)`;
       shape(5, r * 1.2 * pulse);
@@ -813,6 +1110,20 @@ if (typeof document !== "undefined") {
       ctx.globalAlpha = s.flash;
       ctx.fillStyle = "#fff";
       shape(s.g.t < 0 ? 5 : s.g.t, r * 1.1);
+    }
+    if (s.g.k > 0) {
+      // bomb: a badge with the moves left; red when it is about to go off
+      ctx.globalAlpha = s.al;
+      ctx.fillStyle = s.g.k <= 3 ? "#c0392b" : "#2c3e50";
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(r * 0.85, -r * 0.85, r * 0.62, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(r * 0.9)}px Georgia, serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(s.g.k), r * 0.85, -r * 0.82);
+      ctx.textBaseline = "alphabetic";
     }
     if (s.g.c > 0) {
       // cage: bars over the gem; gold and double when it takes two hits
@@ -845,6 +1156,97 @@ if (typeof document !== "undefined") {
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
   }
 
+  // Layers under the gems: ice and the conveyor rows with their moving arrows.
+  function drawBelow(now) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const v = view.ice && view.ice[y][x];
+        if (!v) continue;
+        const px = x * cell + 2;
+        const py = y * cell + 2;
+        ctx.fillStyle = v > 1 ? "rgba(90,170,255,0.6)" : "rgba(160,220,255,0.42)";
+        ctx.fillRect(px, py, cell - 4, cell - 4);
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = v > 1 ? 3 : 1.5;
+        ctx.strokeRect(px + 1.5, py + 1.5, cell - 7, cell - 7);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px + cell * 0.15, py + cell * 0.3); ctx.lineTo(px + cell * 0.4, py + cell * 0.12);
+        if (v > 1) { ctx.moveTo(px + cell * 0.55, py + cell * 0.85); ctx.lineTo(px + cell * 0.82, py + cell * 0.62); }
+        ctx.stroke();
+      }
+    }
+    for (const { y, dir } of state.layout.conveyors) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, y * cell, canvas.width, cell);
+      ctx.clip();
+      ctx.fillStyle = "rgba(255,160,0,0.13)";
+      ctx.fillRect(0, y * cell, canvas.width, cell);
+      ctx.strokeStyle = PAL.muted;
+      ctx.lineWidth = 2;
+      const step = cell / 2;
+      const off = (((now / 25) * dir) % step + step) % step;
+      for (let k = -1; k <= W * 2; k++) {
+        const px = k * step + off;
+        for (const py of [y * cell + 7, (y + 1) * cell - 7]) {
+          ctx.beginPath();
+          ctx.moveTo(px - 4 * dir, py - 4); ctx.lineTo(px + 2 * dir, py); ctx.lineTo(px - 4 * dir, py + 4);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  // Layers over the gems: slime, portal rings and fog.
+  function drawAbove(now) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!(view.slime && view.slime[y][x])) continue;
+        const cx = (x + 0.5) * cell;
+        const cy = (y + 0.5) * cell;
+        const wob = 1 + 0.04 * Math.sin(now / 260 + x * 2 + y * 3);
+        ctx.fillStyle = "rgba(110,200,60,0.55)";
+        ctx.beginPath();
+        ctx.roundRect(cx - cell * 0.45 * wob, cy - cell * 0.45, cell * 0.9 * wob, cell * 0.9, cell * 0.28);
+        ctx.fill();
+        ctx.fillStyle = "rgba(220,255,190,0.7)";
+        ctx.beginPath(); ctx.arc(cx - cell * 0.18, cy - cell * 0.2, cell * 0.07, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + cell * 0.2, cy + cell * 0.14, cell * 0.05, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    state.layout.portals.forEach(([x1, y1, x2, y2], k) => {
+      ctx.strokeStyle = PORTAL_COLORS[k % PORTAL_COLORS.length];
+      for (const [x, y] of [[x1, y1], [x2, y2]]) {
+        const cx = (x + 0.5) * cell;
+        const cy = (y + 0.5) * cell;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(cx, cy, cell * 0.44, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 6]);
+        ctx.lineDashOffset = -now / 40;
+        ctx.beginPath(); ctx.arc(cx, cy, cell * 0.34, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!(view.fog && view.fog[y][x])) continue;
+        ctx.fillStyle = PAL.fog;
+        ctx.globalAlpha = 0.96;
+        ctx.fillRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = PAL.muted;
+        ctx.font = `bold ${Math.round(cell * 0.4)}px Georgia, serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", (x + 0.5) * cell, (y + 0.5) * cell + Math.sin(now / 500 + x + y) * 2);
+        ctx.textBaseline = "alphabetic";
+      }
+    }
+  }
+
   function draw(now) {
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -855,7 +1257,9 @@ if (typeof document !== "undefined") {
         ctx.fillRect(x * cell, y * cell, cell, cell);
       }
     }
+    drawBelow(now);
     for (const s of sprites) drawSprite(s, now);
+    drawAbove(now);
     for (const p of particles) {
       ctx.globalAlpha = 1 - p.life / p.max;
       ctx.fillStyle = p.color;
@@ -875,7 +1279,11 @@ if (typeof document !== "undefined") {
     }
     ctx.globalAlpha = 1;
     if (hint) { outline(hint[0], "#2ecc71", 3); outline(hint[1], "#2ecc71", 3); }
-    if (selected) outline(selected, PAL.text, 4);
+    if (selected) {
+      outline(selected, PAL.text, 4);
+      const q = portalPartner(state.layout, selected);
+      if (q) outline(q, PAL.text, 2); // the other end of the portal
+    }
     if (armed && !busy) {
       for (const p of previewCells()) {
         ctx.fillStyle = "rgba(255,140,0,0.25)";
@@ -892,11 +1300,19 @@ if (typeof document !== "undefined") {
   }
 
   const LOW_MOVES = 5;
+  const OBJECTIVES = [["cages", "Cages"], ["ice", "Ice"], ["slime", "Slime"], ["bombs", "Bombs"], ["fruit", "Fruit"]];
+  const worldOf = (level) => Math.floor((Math.max(1, level) - 1) / WORLD_SIZE);
+  // What the level starts with (the layout), to keep showing a finished counter as 0.
+  const initialObjectives = () => {
+    const L = state.layout;
+    return { cages: L.cages.length, ice: L.ice.length, slime: L.slime.length, bombs: L.timers.length, fruit: L.fruits };
+  };
 
   function hud() {
     shownScore += (targetScore - shownScore) * 0.2;
     if (Math.abs(targetScore - shownScore) < 1) shownScore = targetScore;
     el("level").textContent = state.endless ? "\u221e" : state.level;
+    el("info").textContent = `${difficultyOf(difficulty).label} \u00b7 ${state.endless ? "Endless" : `World ${worldOf(state.level) + 1}: ${WORLDS[worldOf(state.level)].name}`}`;
     el("moves").textContent = state.endless ? "\u221e" : state.movesLeft;
     // Last moves: pulse the counter and the board so the end is not a surprise.
     const low = !state.endless && state.status === "play" && state.movesLeft > 0 && state.movesLeft <= LOW_MOVES;
@@ -904,15 +1320,16 @@ if (typeof document !== "undefined") {
     el("board").classList.toggle("low", low);
     el("score").textContent = Math.round(shownScore);
     el("target").textContent = state.endless ? "\u221e" : state.target;
-    el("best").textContent = (state.endless ? progress.endlessBest : progress.best[state.level]) || 0;
+    el("best").textContent = (state.endless ? prog.endlessBest : prog.best[state.level]) || 0;
     const goal = el("goal");
     goal.hidden = state.endless;
     goal.max = state.endless ? 1 : state.target;
     goal.value = Math.max(0, state.endless ? 0 : Math.min(goal.max, Math.round(shownScore)));
     el("powerups").hidden = false;
-    const cages = cagesLeft(state.board);
-    el("cages-wrap").hidden = !state.layout.cages.length;
-    el("cages").textContent = cages;
+    const left = objectives(state);
+    const parts = OBJECTIVES.filter(([key]) => left[key] > 0 || initialObjectives()[key] > 0).map(([key, label]) => `${label} <b>${left[key]}</b>`);
+    el("objs").innerHTML = parts.join(" \u00b7 ");
+    el("objs-wrap").hidden = state.endless || !parts.length;
     POWERUPS.forEach((p, i) => {
       const b = el(`pu-${p}`);
       b.textContent = `${LABELS[p]} x${state.powerups[p]} (${i + 1})`;
@@ -924,6 +1341,7 @@ if (typeof document !== "undefined") {
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
+    if (run && !panelOpen && !paused && !document.hidden && state.status === "play") run.active += Math.min(1, (now - last) / 1000);
     last = now;
     for (const p of particles) { p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 9 * cell * dt; }
     particles = particles.filter((p) => p.life < p.max);
@@ -935,24 +1353,39 @@ if (typeof document !== "undefined") {
     requestAnimationFrame(frame);
   }
 
-  const goalText = () => state.endless
-    ? "Endless: no goal, no move limit - the board reshuffles when you get stuck"
-    : `Goal: ${state.target} points${state.layout.cages.length ? ` and break all ${state.layout.cages.length} cages` : ""} in ${state.moves} moves`;
+  // The extra goals of a level, e.g. "break all 4 cages and crack all ice".
+  function extraGoals() {
+    const L = state.layout;
+    const parts = [];
+    if (L.cages.length) parts.push(`break all ${L.cages.length} cages`);
+    if (L.ice.length) parts.push(`crack all ${L.ice.length} ice tiles`);
+    if (L.slime.length) parts.push("clear all slime");
+    if (L.timers.length) parts.push(`defuse all ${L.timers.length} bombs`);
+    if (L.fruits) parts.push(`bring all ${L.fruits} fruits down`);
+    return parts.length ? ` and ${parts.join(" and ")}` : "";
+  }
+
+  const goalText = () => {
+    if (state.endless) return "Endless: no goal, no move limit - the board reshuffles when you get stuck";
+    const w = worldOf(state.level);
+    const first = (state.level - 1) % WORLD_SIZE < 3 && w > 0; // the first levels of a world explain their element
+    return `${first ? `${WORLDS[w].tip} ` : ""}Goal: ${state.target} points${extraGoals()} in ${state.moves} moves`;
+  };
 
   // Stores the result of the current level and unlocks the next one.
   function recordResult() {
     const n = state.level;
-    progress.powerups = { ...state.powerups };
+    prog.powerups = { ...state.powerups };
     if (state.endless) {
-      progress.endlessBest = Math.max(progress.endlessBest, state.score);
-      } else {
-      progress.best[n] = Math.max(progress.best[n] || 0, state.score);
+      prog.endlessBest = Math.max(prog.endlessBest, state.score);
+    } else {
+      prog.best[n] = Math.max(prog.best[n] || 0, state.score);
       if (state.status === "levelclear") {
-        progress.stars[n] = Math.max(progress.stars[n] || 0, state.stars);
-        progress.unlocked = Math.max(progress.unlocked, Math.min(MAX_LEVEL, n + 1));
+        prog.stars[n] = Math.max(prog.stars[n] || 0, state.stars);
+        prog.unlocked = Math.max(prog.unlocked, Math.min(MAX_LEVEL, n + 1));
       }
     }
-    try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* storage full or blocked */ }
+    saveProgress();
     buildGrid();
   }
 
@@ -964,6 +1397,7 @@ if (typeof document !== "undefined") {
     const res = trySwap(state, a, b);
     if (dbg.freezeMoves && isFinite(state.movesLeft) && res.valid) state.movesLeft = Math.max(1, state.moves);
     busy = true;
+    if (run) { if (res.valid) run.swaps++; else run.invalid++; }
     if (!res.valid) {
       say("No match - try another swap");
       await swapAnim(a, b, true);
@@ -973,12 +1407,23 @@ if (typeof document !== "undefined") {
     say(goalText());
     await swapAnim(a, b, false);
     setBoard(res.start);
+    setView(res.startOver);
     await finishMove(res);
   }
 
   // Replays a resolved move (swap or powerup): steps, shuffle, bonus, earned powerups, saving.
   async function finishMove(res) {
     for (const step of res.steps) await animateStep(step);
+    if (res.conveyor) {
+      await conveyorAnim(res.conveyor);
+      for (const step of res.conveyor.steps) await animateStep(step);
+    }
+    if (res.slime) popup(res.slime.x, res.slime.y, "Slime!", 18);
+    if (res.exploded) {
+      shake = 12;
+      popup(res.exploded.x, res.exploded.y, "Boom!", 32);
+      say("A bomb went off - level lost");
+    }
     if (res.shuffled) await shuffleAnim(res.board || state.board);
     for (const type of res.awards) {
       popup(W / 2 - 0.5, H / 2 - 0.5, `${LABELS[type]} earned!`, 26);
@@ -990,7 +1435,16 @@ if (typeof document !== "undefined") {
       say(`Level clear! +${res.bonus} bonus for unused moves`);
     }
     if (res.finale && res.finale.length) await playFinale(res);
+    setBoard(state.board); // bomb counters, slime and the like
+    setView();
     targetScore = state.score;
+    if (run) {
+      run.score = state.score;
+      run.movesLeft = state.movesLeft;
+      run.awards += res.awards.length;
+      if (res.shuffled) run.shuffles++;
+      if (state.status !== "play") endRun(state.status === "levelclear" ? "won" : "lost", state.status === "over" ? { cause: res.exploded ? "bomb" : "moves" } : {});
+    }
     if (state.status !== "play" || state.endless || res.powerup || res.awards.length) recordResult();
     busy = false;
   }
@@ -1029,12 +1483,15 @@ if (typeof document !== "undefined") {
     const type = armed;
     const res = usePowerup(state, type, pos);
     if (!res.valid) return;
+    if (run) run.used[type]++;
+    track("powerup_used", { level: state.level, difficulty: state.difficulty, mode: state.endless ? "endless" : "level", kind: type, moves_left: isFinite(state.movesLeft) ? state.movesLeft : null });
     armed = null;
     selected = null;
     hint = null;
     busy = true;
     say(goalText());
     setBoard(res.start);
+    setView(res.startOver);
     shake = type === "hammer" ? 2 : 6;
     await finishMove(res);
   }
@@ -1076,7 +1533,7 @@ if (typeof document !== "undefined") {
     if (!p || busy || paused) return;
     cursor = p;
     if (armed) { usePower(p); return; }
-    if (selected && adjacent(selected, p)) { play(selected, p); return; }
+    if (selected && (adjacent(selected, p) || linkedCells(state.layout, selected, p))) { play(selected, p); return; }
     selected = p;
     drag = { p, x: e.clientX, y: e.clientY };
     hint = null;
@@ -1103,6 +1560,7 @@ if (typeof document !== "undefined") {
   };
 
   async function newBoard() {
+    startRun();
     busy = true;
     selected = null;
     hint = null;
@@ -1127,8 +1585,9 @@ if (typeof document !== "undefined") {
 
   function showHint() {
     if (state.status !== "play" || busy || paused || panelOpen) return;
-    hint = findMove(state.board);
+    hint = findMove(state.board, state.layout);
     selected = null;
+    if (run) run.hints++;
   }
 
   // Tap the board when a level is over: continue / retry (no keyboard on phones).
@@ -1169,8 +1628,13 @@ if (typeof document !== "undefined") {
       } else {
         cursor = { x: Math.min(W - 1, Math.max(0, cursor.x + dx)), y: Math.min(H - 1, Math.max(0, cursor.y + dy)) };
       }
-    } else if (key === " " || key === "Enter") selected = selected ? null : { ...cursor };
-    else return;
+    } else if (key === " " || key === "Enter") {
+      if (selected && linkedCells(state.layout, selected, cursor)) play(selected, { ...cursor });
+      else selected = selected ? null : { ...cursor };
+    } else if (key === "t") {
+      const q = portalPartner(state.layout, selected || cursor); // jump to the other end of a portal
+      if (q) cursor = q;
+    } else return;
     e.preventDefault();
   });
 
@@ -1193,17 +1657,28 @@ if (typeof document !== "undefined") {
         <p>When a level ends, all special gems on the board fire for bonus points.</p>`,
     },
     {
-      title: "Walls and cages",
-      html: `<p>From level 101 the board has obstacles:</p>
-        ${demo(`<span class="rock"></span> <small>Rock: blocked. Nothing moves or falls through it.</small>`)}
-        ${demo(`<span class="cage">${g(5, "&#9679;")}</span> <small>Cage: the gem is locked. Clear it or a gem next to it to break the cage (gold cages take two hits).</small>`)}
-        <p>To win a level, reach the score goal <b>and</b> break all cages.</p>`,
+      title: "Obstacles",
+      html: `<p>Every world after the first brings <b>one new element</b>:</p>
+        ${demo(`<span class="rock"></span> <small>Rocks: blocked. Nothing moves or falls through them.</small>`)}
+        ${demo(`<span class="cage">${g(5, "&#9679;")}</span> <small>Cages: the gem is locked. Clear it or a neighbour to break the cage (gold takes two hits).</small>`)}
+        ${demo(`<span class="ice">${g(1, "&#9632;")}</span> <small>Ice: clear a gem on it to crack it. All ice has to go.</small>`)}
+        ${demo(`<span class="slime">${g(2, "&#9650;")}</span> <small>Slime: clear a gem on it. It spreads when a move does not.</small>`)}
+        <p>To win, reach the score goal <b>and</b> deal with the world's element.</p>`,
     },
     {
-      title: "Powerups and endless mode",
-      html: `<p>In <b>Endless</b> mode (Levels menu) there is no goal and no move limit. Every <b>combo of 4 or more gems</b> has a 50% chance to give you a powerup:</p>
-        <p><b>Hammer</b> clears one gem, <b>Bomb</b> clears 3x3, <b>Rainbow</b> clears one colour. Press its button (or 1, 2, 3), then pick a gem. Powerups cost no move and work in every level.</p>
-        <p>Your progress, stars and powerups are saved in this browser. You can open this guide again from the <b>Levels</b> menu (or with ?).</p>`,
+      title: "More elements",
+      html: `${demo(`<span class="belt">&rsaquo;&rsaquo;&rsaquo;</span> <small>Conveyor rows slide one cell after every move.</small>`)}
+        ${demo(`<span class="portal"></span> &harr; <span class="portal"></span> <small>Portals: swap the two linked gems from anywhere (tap one, then the other; T jumps to the partner).</small>`)}
+        ${demo(`<span class="bomb">${g(0, "&#9679;")}<b>5</b></span> <small>Bombs count down every move. At 0 the level is lost.</small>`)}
+        ${demo(`<span>&#127826;</span> <small>Fruit: clear the gems below it until it reaches the bottom row.</small>`)}
+        ${demo(`<span class="fog">?</span> <small>Fog hides gems until a gem on or next to it clears.</small>`)}`,
+    },
+    {
+      title: "Difficulty and powerups",
+      html: `<p>Pick a <b>difficulty</b> before the levels: Easy has 5 gem colours, Medium 6, Hard 7. Extreme starts every world with 8 and ends it with 10. Each difficulty has its own progress and its own powerups.</p>
+        <p>In <b>Endless</b> mode (Levels menu) there is no goal and no move limit. Every <b>combo of 4 or more gems</b> has a 50% chance to give you a powerup:</p>
+        <p><b>Hammer</b> clears one gem, <b>Bomb</b> clears 3x3, <b>Rainbow</b> clears one colour. Press its button (or 1, 2, 3), then pick a gem. Powerups cost no move and work in every level of that difficulty.</p>
+        <p>Your progress is saved in this browser. Open this guide again from the <b>Levels</b> menu (or with ?).</p>`,
     },
   ];
   let helpIndex = 0;
@@ -1233,7 +1708,7 @@ if (typeof document !== "undefined") {
   function closeHelp() {
     helpOpen = false;
     el("help").hidden = true;
-    if (!progress.helpSeen) { progress.helpSeen = true; try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* ignore */ } }
+    if (!progress.helpSeen) { progress.helpSeen = true; saveProgress(); }
   }
 
   el("help-btn").addEventListener("click", showHelp);
@@ -1241,38 +1716,108 @@ if (typeof document !== "undefined") {
   el("help-next").addEventListener("click", helpNext);
   el("help-close").addEventListener("click", closeHelp);
 
-  // --- level overview ---
+  // --- level overview: one world at a time, behind the difficulty choice ---
 
-  const grids = [el("grid"), el("grid2")];
+  const levelGrid = el("grid");
 
   function buildGrid() {
     el("endless").className = state.endless ? "current" : "";
-    el("endless").textContent = `\u221e Endless (best ${progress.endlessBest})`;
-    grids.forEach((grid, w) => {
-      grid.textContent = "";
-      for (let n = w * WORLD_SIZE + 1; n <= (w + 1) * WORLD_SIZE; n++) {
-        const cfg = levelConfig(n);
-        const b = document.createElement("button");
-        const locked = n > progress.unlocked;
-        b.className = "lvl" + (locked ? " locked" : "") + (n === state.level && !state.endless ? " current" : "");
-        b.disabled = locked;
-        const extras = (cfg.layout.rocks.length ? `, ${cfg.layout.rocks.length} rocks` : "") + (cfg.layout.cages.length ? `, ${cfg.layout.cages.length} cages` : "");
-        b.title = `Level ${n}: ${cfg.target} points in ${cfg.moves} moves${extras}` + (progress.best[n] ? ` (best ${progress.best[n]})` : "");
-        const stars = progress.stars[n] || 0;
-        b.innerHTML = `<b>${n}</b><span>${locked ? "\u{1F512}" : "\u2605".repeat(stars) + "\u2606".repeat(3 - stars)}</span>`;
-        b.addEventListener("click", () => { if (!busy) { startLevel(state, n); paused = false; togglePanel(false); newBoard(); } });
-        grid.appendChild(b);
-      }
-    });
+    el("endless").textContent = `\u221e Endless (best ${prog.endlessBest})`;
+    el("diff-name").textContent = difficultyOf(difficulty).label;
+    el("stock").textContent = POWERUPS.map((p) => `${LABELS[p]} ${state.powerups[p]}`).join(" \u00b7 ");
+    const w = menuWorld;
+    const first = w * WORLD_SIZE + 1;
+    let cleared = 0;
+    for (let n = first; n < first + WORLD_SIZE; n++) if (prog.stars[n]) cleared++;
+    el("w-title").textContent = `World ${w + 1}: ${WORLDS[w].name}`;
+    el("w-sub").textContent = `${WORLDS[w].tip} (${cleared}/${WORLD_SIZE} cleared)`;
+    el("w-prev").disabled = w === 0;
+    el("w-next").disabled = w === WORLDS.length - 1;
+    levelGrid.textContent = "";
+    for (let n = first; n < first + WORLD_SIZE; n++) {
+      const cfg = levelConfig(n, difficulty);
+      const b = document.createElement("button");
+      const locked = n > prog.unlocked;
+      b.className = "lvl" + (locked ? " locked" : "") + (n === state.level && !state.endless ? " current" : "");
+      b.disabled = locked;
+      b.title = `Level ${n}: ${cfg.target} points in ${cfg.moves} moves, ${cfg.types} colours` + (prog.best[n] ? ` (best ${prog.best[n]})` : "");
+      const stars = prog.stars[n] || 0;
+      b.innerHTML = `<b>${n}</b><span>${locked ? "\u{1F512}" : "\u2605".repeat(stars) + "\u2606".repeat(3 - stars)}</span>`;
+      b.addEventListener("click", () => { if (!busy) { startLevel(state, n); paused = false; togglePanel(false); newBoard(); } });
+      levelGrid.appendChild(b);
+    }
+  }
+
+  // Screens: "board", "levels" (overview) or "diff" (difficulty choice, asked first).
+  function showScreen(name) {
+    panelOpen = name !== "board";
+    armed = null;
+    el("diff").hidden = name !== "diff";
+    el("levels").hidden = name !== "levels";
+    el("board").hidden = name !== "board";
   }
 
   function togglePanel(open = !panelOpen) {
     if (open && busy) return;
-    panelOpen = open;
+    showScreen(open ? "levels" : "board");
+    if (open) {
+      menuWorld = state.endless ? menuWorld : worldOf(state.level);
+      buildGrid();
+      const cur = levelGrid.querySelector(".current");
+      if (cur && cur.focus) cur.focus();
+    }
+  }
+
+  // A fresh board without the drop-in animation (behind the menus).
+  function loadQuietly() {
+    selected = null;
+    hint = null;
     armed = null;
-    el("levels").hidden = !open;
-    el("board").hidden = open;
-    if (open) { buildGrid(); const cur = grids[0].querySelector(".current") || grids[1].querySelector(".current"); if (cur && cur.focus) cur.focus(); }
+    particles = [];
+    popups = [];
+    targetScore = shownScore = state.score;
+    setView();
+    setBoard(state.board);
+    say(goalText());
+  }
+
+  // Every difficulty keeps its own progress and powerups: switching continues at its highest level.
+  function chooseDifficulty(id) {
+    if (busy) return;
+    track("difficulty_chosen", { difficulty: id, unlocked: progress.byDiff[id].unlocked });
+    difficulty = id;
+    prog = progress.byDiff[id];
+    state.difficulty = id;
+    state.powerups = { ...prog.powerups };
+    startLevel(state, prog.unlocked);
+    paused = false;
+    saveProgress();
+    loadQuietly();
+    menuWorld = worldOf(state.level);
+    showScreen("levels");
+    buildGrid();
+  }
+
+  function showDifficulty() {
+    if (busy) return;
+    showScreen("diff");
+    const list = el("diff-list");
+    list.textContent = "";
+    for (const d of DIFFICULTIES) {
+      const done = Object.keys(progress.byDiff[d.id].stars).length;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "diffbtn" + (d.id === difficulty ? " current" : "");
+      const name = document.createElement("b");
+      name.textContent = d.label;
+      const text = document.createElement("span");
+      text.textContent = d.text;
+      const count = document.createElement("small");
+      count.textContent = done >= MAX_LEVEL ? "All worlds cleared" : `${done}/${MAX_LEVEL} levels cleared`;
+      b.append(name, text, count);
+      b.addEventListener("click", () => chooseDifficulty(d.id));
+      list.append(b);
+    }
   }
 
   el("endless").addEventListener("click", () => { if (!busy) { startEndless(state); paused = false; togglePanel(false); newBoard(); } });
@@ -1281,18 +1826,21 @@ if (typeof document !== "undefined") {
   el("btn-retry").addEventListener("click", () => { if (!busy && !panelOpen) retry(); });
   el("levels-btn").addEventListener("click", () => togglePanel());
   el("levels-close").addEventListener("click", () => togglePanel(false));
+  el("btn-diff").addEventListener("click", showDifficulty);
+  el("w-prev").addEventListener("click", () => { menuWorld = Math.max(0, menuWorld - 1); buildGrid(); });
+  el("w-next").addEventListener("click", () => { menuWorld = Math.min(WORLDS.length - 1, menuWorld + 1); buildGrid(); });
 
   // --- Debug window: type debug_window() in the browser console (debug_window(false) closes it) ---
   // The same actions are available from the console as `match3_debug` (e.g. match3_debug.goto(150)).
   const idle = async () => { while (busy) await new Promise((r) => setTimeout(r, 40)); };
-  const persist = () => { try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch (e) { /* ignore */ } };
+  const persist = saveProgress;
   const forEachCell = (fn) => state.board.forEach((row, y) => row.forEach((c, x) => fn(c, x, y)));
 
   const dbg = {
     freezeMoves: false, // moves never run out
     placing: null, // tool applied to the clicked cell instead of playing
     get state() { return state; },
-    progress,
+    get progress() { return prog; },
     findMove, levelConfig, usePowerup, trySwap,
 
     async goto(n) {
@@ -1307,8 +1855,13 @@ if (typeof document !== "undefined") {
     async win() {
       await idle();
       if (state.status !== "play") return;
-      forEachCell((c) => { if (c && c.c > 0) c.c = 0; });
+      forEachCell((c) => { if (c && c.c > 0) c.c = 0; if (c && c.k > 0) c.k = 0; });
+      state.ice = grid(0);
+      state.slime = grid(false);
+      state.fruitQueue = 0;
+      state.board = state.board.map((r, y) => r.map((c, x) => (c && c.t === FRUIT ? gem(0) : c)));
       setBoard(state.board);
+      setView();
       if (state.endless) return;
       state.score = Math.max(state.score, state.target);
       state.status = "levelclear";
@@ -1332,7 +1885,7 @@ if (typeof document !== "undefined") {
     setPowerup(type, n) {
       state.powerups[type] = Math.max(0, Math.floor(n));
       if (n > 0) flashPowerup(type);
-      progress.powerups = { ...state.powerups };
+      prog.powerups = { ...state.powerups };
       persist();
     },
     setAwardChance(percent) { state.awardChance = Math.min(1, Math.max(0, percent / 100)); },
@@ -1358,11 +1911,20 @@ if (typeof document !== "undefined") {
       else if (tool === "uncage") state.board[y][x] = gem(keepType, cur && cur.s !== "rock" ? cur.s : null);
       else if (tool === "rock") state.board[y][x] = gem(ROCK, "rock");
       else if (tool === "random") state.board[y][x] = gem(Math.floor(Math.random() * state.types));
+      else if (tool === "ice1" || tool === "ice2") state.ice[y][x] = tool === "ice1" ? 1 : 2;
+      else if (tool === "slime") state.slime[y][x] = true;
+      else if (tool === "fog") state.fog[y][x] = true;
+      else if (tool === "bomb") { if (cur && cur.t >= 0) cur.k = 6; }
+      else if (tool === "fruit") state.board[y][x] = gem(FRUIT);
+      else if (tool === "clearlayers") { state.ice[y][x] = 0; state.slime[y][x] = false; state.fog[y][x] = false; }
       setBoard(state.board);
+      setView();
     },
-    unlockAll() { progress.unlocked = MAX_LEVEL; persist(); buildGrid(); },
+    unlockAll() { prog.unlocked = MAX_LEVEL; persist(); buildGrid(); },
     resetProgress() {
-      Object.assign(progress, { unlocked: 1, endlessBest: 0, helpSeen: false, powerups: { hammer: 0, bomb: 0, rainbow: 0 }, stars: {}, best: {} });
+      for (const d of DIFFICULTIES) progress.byDiff[d.id] = blankProgress();
+      progress.helpSeen = false;
+      prog = progress.byDiff[difficulty];
       for (const p of POWERUPS) state.powerups[p] = 0;
       persist();
       buildGrid();
@@ -1380,9 +1942,9 @@ if (typeof document !== "undefined") {
       return [
         `level ${state.endless ? "endless" : state.level}  status ${state.status}${busy ? "  (busy)" : ""}`,
         `moves ${state.movesLeft}/${state.moves}  score ${state.score}/${state.target}  stars ${state.stars}`,
-        `cages ${cagesLeft(state.board)}  rocks ${rocks}  valid moves ${moves}`,
+        `left ${JSON.stringify(objectives(state))}  rocks ${rocks}  valid moves ${moves}`,
         `powerups ${POWERUPS.map((p) => `${p[0].toUpperCase()}${state.powerups[p]}`).join(" ")}  award chance ${Math.round((state.awardChance ?? AWARD_CHANCE) * 100)}%`,
-        `unlocked ${progress.unlocked}  stars ${Object.keys(progress.stars).length}  anim x${animSpeed}`,
+        `${difficulty}  unlocked ${prog.unlocked}  stars ${Object.keys(prog.stars).length}  anim x${animSpeed}`,
         `theme ${root.getAttribute("data-theme")}  armed ${armed || "-"}  placing ${dbg.placing || "-"}`,
       ].join("\n");
     },
@@ -1432,14 +1994,15 @@ if (typeof document !== "undefined") {
     freeze.addEventListener("change", () => { dbg.freezeMoves = freeze.checked; });
     const freezeLabel = document.createElement("label");
     freezeLabel.append(freeze, " infinite moves");
-    const tools = [["", "off (play)"], ...[0, 1, 2, 3, 4, 5].map((n) => [`t${n}`, `gem ${n}`]),
+    const tools = [["", "off (play)"], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [`t${n}`, `gem ${n}`]),
       ["row", "special: row"], ["col", "special: column"], ["blast", "special: blast"], ["color", "special: colour"],
-      ["cage1", "cage (1 hit)"], ["cage2", "cage (2 hits)"], ["uncage", "remove cage"], ["rock", "rock"], ["random", "random gem"]];
+      ["cage1", "cage (1 hit)"], ["cage2", "cage (2 hits)"], ["uncage", "remove cage"], ["rock", "rock"], ["random", "random gem"],
+      ["ice1", "ice"], ["ice2", "thick ice"], ["slime", "slime"], ["fog", "fog"], ["bomb", "bomb (6)"], ["fruit", "fruit"], ["clearlayers", "clear ice/slime/fog"]];
     panel.append(
       head, out,
       title("Level"),
       row(levelInput, btn("Go", () => dbg.goto(levelInput.value)), btn("Prev", () => dbg.goto((state.level || 1) - 1)), btn("Next", () => dbg.goto((state.level || 0) + 1)), btn("Endless", () => dbg.endless())),
-      row(btn("Win", () => dbg.win()), btn("Lose", () => dbg.lose()), btn("Retry", () => dbg.retry()), btn("Unlock all", () => dbg.unlockAll()), btn("Tutorial", showHelp), btn("Reset progress", () => { if (confirm("Reset all saved progress?")) dbg.resetProgress(); })),
+      row(select(DIFFICULTIES.map((d) => [d.id, d.label]), (v) => { chooseDifficulty(v); togglePanel(false); newBoard(); }), btn("Win", () => dbg.win()), btn("Lose", () => dbg.lose()), btn("Retry", () => dbg.retry()), btn("Unlock all", () => dbg.unlockAll()), btn("Tutorial", showHelp), btn("Reset progress", () => { if (confirm("Reset all saved progress?")) dbg.resetProgress(); })),
       title("Moves and score"),
       row(btn("+5 moves", () => dbg.addMoves(5)), btn("-1 move", () => dbg.addMoves(-1)), freezeLabel),
       row(scoreInput, btn("+ score", () => dbg.addScore(Number(scoreInput.value) || 0)), btn("- score", () => dbg.addScore(-(Number(scoreInput.value) || 0)))),
@@ -1473,9 +2036,9 @@ if (typeof document !== "undefined") {
     return "debug window open - debug_window(false) closes it; actions: match3_debug";
   };
 
-  buildGrid();
-  say(goalText());
-  newBoard();
+  window.addEventListener("pagehide", () => endRun("abandoned"));
+  loadQuietly();
+  showDifficulty(); // asked first, as in Tap Match
   if (!progress.helpSeen) showHelp(); // first visit
   requestAnimationFrame(frame);
 }

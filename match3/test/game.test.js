@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 const g = require("../game.js");
 
+const T = 6; // gem colours of a Medium level
+
 function mulberry32(seed) {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -13,7 +15,7 @@ function mulberry32(seed) {
 
 // Board without any matches: neighbours differ by 1 horizontally and by 2 vertically.
 function base() {
-  return Array.from({ length: g.H }, (_, y) => Array.from({ length: g.W }, (_, x) => g.gem((x + 2 * y) % g.TYPES)));
+  return Array.from({ length: g.H }, (_, y) => Array.from({ length: g.W }, (_, x) => g.gem((x + 2 * y) % T)));
 }
 
 // Overrides cells: set(board, [[x, y, type, special?], ...])
@@ -28,7 +30,7 @@ function stateWith(board, refills = []) {
   const queue = [...refills];
   const random = () => (queue.length ? queue.shift() : rnd());
   const cfg = g.levelConfig(1);
-  return { board, score: 0, level: 1, types: g.TYPES, moves: cfg.moves, movesLeft: cfg.moves, target: cfg.target, stars: 0, status: "play", random };
+  return { board, score: 0, level: 1, types: T, moves: cfg.moves, movesLeft: cfg.moves, target: cfg.target, stars: 0, status: "play", random };
 }
 
 const types = (b) => b.map((r) => r.map((c) => c.t));
@@ -248,47 +250,89 @@ test("invariant: random play always leaves a full, stable, playable board", () =
   }
 });
 
-test("levelConfig: world 1 has 100 levels, difficulty only ever grows", () => {
-  assert.equal(g.WORLD_SIZE, 100);
-  assert.equal(g.MAX_LEVEL, 200);
-  let prev = g.levelConfig(1);
-  for (let n = 2; n <= g.WORLD_SIZE; n++) {
-    const c = g.levelConfig(n);
-    assert.equal(c.level, n);
-    assert.ok(c.target >= prev.target, `target at ${n}`);
-    assert.ok(c.moves <= prev.moves, `moves at ${n}`);
-    assert.deepEqual(c.layout, { rocks: [], cages: [] });
-    prev = c;
+test("levelConfig: 10 worlds of 30 levels, goals grow inside a world", () => {
+  assert.equal(g.WORLD_SIZE, 30);
+  assert.equal(g.WORLDS.length, 10);
+  assert.equal(g.MAX_LEVEL, 300);
+  for (let w = 0; w < 10; w++) {
+    let prev = g.levelConfig(w * 30 + 1);
+    for (let n = w * 30 + 2; n <= w * 30 + 30; n++) {
+      const c = g.levelConfig(n);
+      assert.equal(c.level, n);
+      assert.equal(c.world, w);
+      assert.ok(c.target >= prev.target, `target at ${n}`);
+      prev = c;
+    }
+    assert.ok(prev.target > g.levelConfig(w * 30 + 1).target);
   }
-  assert.ok(prev.target > g.levelConfig(1).target);
-  assert.ok(prev.moves < g.levelConfig(1).moves);
+  assert.deepEqual(g.levelConfig(1).layout, g.emptyLayout());
   assert.equal(g.levelConfig(0).level, 1);
-  assert.equal(g.levelConfig(500).level, 200);
+  assert.equal(g.levelConfig(999).level, 300);
 });
 
-test("world 2: 100 levels with rocks and cages, valid boards, deterministic layouts", () => {
-  for (let n = 101; n <= 200; n++) {
-    const c = g.levelConfig(n);
-    assert.equal(c.level, n);
-    assert.deepEqual(c.layout, g.levelConfig(n).layout);
-    const rocks = new Set(c.layout.rocks.map(([x, y]) => y * g.W + x));
-    assert.ok(c.layout.rocks.length >= 4 && c.layout.rocks.length <= 20, `rocks at ${n}`);
-    assert.equal(rocks.size, c.layout.rocks.length);
-    assert.ok(c.layout.cages.length <= 20);
-    for (const [x, y, hp] of c.layout.cages) {
-      assert.ok(x >= 0 && x < g.W && y >= 0 && y < g.H);
-      assert.ok(!rocks.has(y * g.W + x), `cage on a rock at ${n}`);
-      assert.ok(hp === 1 || hp === 2);
+test("difficulty: colours per level (Extreme goes 8 to 10 in every world)", () => {
+  assert.deepEqual(g.DIFFICULTIES.map((d) => d.id), ["easy", "medium", "hard", "extreme"]);
+  for (let w = 0; w < 10; w++) {
+    const first = w * 30 + 1;
+    const last = w * 30 + 30;
+    assert.equal(g.levelConfig(first, "easy").types, 5);
+    assert.equal(g.levelConfig(last, "easy").types, 5);
+    assert.equal(g.levelConfig(first).types, 6);
+    assert.equal(g.levelConfig(last, "medium").types, 6);
+    assert.equal(g.levelConfig(first, "hard").types, 7);
+    assert.equal(g.levelConfig(last, "hard").types, 7);
+    assert.equal(g.levelConfig(first, "extreme").types, 8);
+    assert.equal(g.levelConfig(last, "extreme").types, 10);
+    let prev = 8;
+    for (let n = first; n <= last; n++) {
+      const t = g.levelConfig(n, "extreme").types;
+      assert.ok(t >= prev && t <= 10);
+      prev = t;
     }
-    const state = g.createState(mulberry32(n), n);
-    assert.equal(g.findGroups(state.board).length, 0, `matches at start of ${n}`);
-    assert.ok(g.findMove(state.board), `no move at ${n}`);
-    assert.equal(state.board.flat().filter((c2) => c2.t === g.ROCK).length, c.layout.rocks.length);
-    assert.equal(g.cagesLeft(state.board), c.layout.cages.length);
   }
-  assert.equal(g.levelConfig(101).layout.cages.length, 0);
-  assert.ok(g.levelConfig(200).layout.cages.length >= 10);
-  assert.ok(g.levelConfig(200).layout.cages.length > g.levelConfig(120).layout.cages.length);
+  assert.equal(g.levelConfig(5, "nope").types, 6); // unknown difficulty = Medium
+  assert.ok(g.levelConfig(40, "easy").target < g.levelConfig(40, "extreme").target * 2);
+  const s = g.createState(mulberry32(3), 1, {}, "extreme");
+  assert.equal(s.difficulty, "extreme");
+  assert.equal(s.types, 8);
+  assert.ok(new Set(s.board.flat().map((c) => c.t)).size <= 8);
+});
+
+// The element a world introduces: the layout fields it fills (every other world leaves them empty).
+const ELEMENT = { rocks: "rocks", cages: "cages", ice: "ice", conveyor: "conveyors", slime: "slime", portal: "portals", timer: "timers", fruit: "fruitCells", fog: "fog" };
+
+test("worlds: each one adds exactly one element, valid boards, deterministic layouts", () => {
+  for (const diff of ["easy", "medium", "hard", "extreme"]) {
+    g.WORLDS.forEach((world, w) => {
+      for (const i of [0, 7, 15, 22, 29]) {
+        const n = w * 30 + i + 1;
+        const c = g.levelConfig(n, diff);
+        assert.deepEqual(c.layout, g.levelConfig(n, diff).layout);
+        for (const [id, field] of Object.entries(ELEMENT)) {
+          if (id !== world.id) assert.equal(c.layout[field].length, 0, `${field} in ${world.id} ${n}`);
+        }
+        if (world.id !== "classic") assert.ok(c.layout[ELEMENT[world.id]].length > 0 || (world.id === "cages" && i < 2), `${world.id} ${n} has its element`);
+        const state = g.createState(mulberry32(n), n, {}, diff);
+        assert.equal(g.findGroups(state.board).length, 0, `matches at start of ${n} ${diff}`);
+        assert.ok(g.findMove(state.board, state.layout), `no move at ${n} ${diff}`);
+      }
+    });
+  }
+  const hard = g.levelConfig(60 + 30, "extreme").layout.cages.length;
+  assert.ok(hard >= g.levelConfig(61, "extreme").layout.cages.length);
+  assert.ok(g.levelConfig(90, "extreme").layout.cages.length <= 20);
+});
+
+test("rocks world: rocks sit on their cells, cages only in the cages world", () => {
+  const c = g.levelConfig(45);
+  const state = g.createState(mulberry32(1), 45);
+  assert.equal(state.board.flat().filter((x) => x.t === g.ROCK).length, c.layout.rocks.length);
+  assert.ok(c.layout.rocks.length >= 4 && c.layout.rocks.length <= 24);
+  const cages = g.levelConfig(90);
+  const st = g.createState(mulberry32(1), 90);
+  assert.equal(g.cagesLeft(st.board), cages.layout.cages.length);
+  assert.equal(st.board.flat().filter((x) => x.t === g.ROCK).length, 0);
+  for (const [x, y, hp] of cages.layout.cages) assert.ok(hp === 1 || hp === 2, `${x},${y}`);
 });
 
 test("starsFor: more moves left means more stars", () => {
@@ -502,7 +546,7 @@ test("gravity works per segment: rocks stay and gems do not fall through them", 
   assert.equal(board[3][2].t, above); // above the rock nothing moved
   assert.equal(board[7][2].t, 4); // below the rock the segment closed up...
   assert.equal(board[6][2].t, 0);
-  assert.ok(board[5][2].t >= 0 && board[5][2].t < g.TYPES); // ...and refilled from its own top
+  assert.ok(board[5][2].t >= 0 && board[5][2].t < T); // ...and refilled from its own top
 });
 
 test("matches do not clear rocks; specials and powerups skip them too", () => {
@@ -547,7 +591,10 @@ test("a caged gem that is part of the match is cleared when its cage breaks", ()
 });
 
 test("shuffle keeps rocks and cages in place", () => {
-  const state = g.createState(mulberry32(5), 150);
+  const state = g.createState(mulberry32(5), 45); // rocks
+  const free = [];
+  state.board.forEach((row, y) => row.forEach((c, x) => { if (!g.isFixed(c)) free.push([x, y]); }));
+  state.board[free[10][1]][free[10][0]].c = 2;
   const fixed = [];
   state.board.forEach((row, y) => row.forEach((c, x) => { if (g.isFixed(c)) fixed.push([x, y, c.t, c.c]); }));
   assert.ok(fixed.length > 0);
@@ -560,21 +607,30 @@ test("shuffle keeps rocks and cages in place", () => {
   assert.ok(g.findMove(state.board));
 });
 
-test("invariant: random play on world 2 levels keeps boards full, stable and playable", () => {
-  for (const level of [101, 120, 150, 180, 200]) {
-    const rnd = mulberry32(level);
-    const state = g.createState(rnd, level);
-    for (let i = 0; i < 40 && state.status === "play"; i++) {
-      const moves = [];
-      for (let y = 0; y < g.H; y++) for (let x = 0; x < g.W; x++) for (const [dx, dy] of [[1, 0], [0, 1]]) {
-        if (x + dx < g.W && y + dy < g.H && g.isValidSwap(state.board, { x, y }, { x: x + dx, y: y + dy })) moves.push([{ x, y }, { x: x + dx, y: y + dy }]);
+// Every legal swap, portal swaps included.
+function allMoves(state) {
+  const moves = [];
+  for (let y = 0; y < g.H; y++) for (let x = 0; x < g.W; x++) for (const [dx, dy] of [[1, 0], [0, 1]]) {
+    if (x + dx < g.W && y + dy < g.H && g.isValidSwap(state.board, { x, y }, { x: x + dx, y: y + dy })) moves.push([{ x, y }, { x: x + dx, y: y + dy }]);
+  }
+  for (const [x1, y1, x2, y2] of state.layout.portals) if (g.isValidSwap(state.board, { x: x1, y: y1 }, { x: x2, y: y2 })) moves.push([{ x: x1, y: y1 }, { x: x2, y: y2 }]);
+  return moves;
+}
+
+test("invariant: random play in every world keeps boards full, stable and playable", () => {
+  for (const diff of ["easy", "extreme"]) {
+    for (const level of [31, 60, 61, 90, 91, 120, 121, 150, 151, 180, 181, 210, 211, 240, 241, 270, 271, 300]) {
+      const rnd = mulberry32(level);
+      const state = g.createState(rnd, level, {}, diff);
+      for (let i = 0; i < 30 && state.status === "play"; i++) {
+        const moves = allMoves(state);
+        assert.ok(moves.length > 0, `no move at ${level} ${diff}`);
+        const [a, b] = moves[Math.floor(rnd() * moves.length)];
+        assert.equal(g.trySwap(state, a, b).valid, true);
+        assert.ok(full(state.board));
+        assert.equal(g.findGroups(state.board).length, 0, `stable at ${level} ${diff}`);
+        if (state.status === "play") assert.ok(g.findMove(state.board, state.layout), `playable at ${level} ${diff}`);
       }
-      assert.ok(moves.length > 0);
-      const [a, b] = moves[Math.floor(rnd() * moves.length)];
-      assert.equal(g.trySwap(state, a, b).valid, true);
-      assert.ok(full(state.board));
-      assert.equal(g.findGroups(state.board).length, 0);
-      assert.ok(g.findMove(state.board));
     }
   }
 });
@@ -678,4 +734,191 @@ test("finale: a colour gem (the rainbow star) clears one complete colour", () =>
     const [t] = colours;
     assert.equal(first.length, before.flat().filter((x) => x === t).length + 1); // every gem of it, plus the star
   }
+});
+
+// --- world elements ---------------------------------------------------------
+const gridOf = (fill) => Array.from({ length: g.H }, () => Array(g.W).fill(fill));
+
+// A 3-run at the top left: swapping (2,0) with (2,1) clears the cells (0,0), (1,0) and (2,0).
+function runState(extra = {}) {
+  const state = stateWith(set(base(), [[0, 0, 4], [1, 0, 4], [2, 1, 4]]));
+  state.layout = g.emptyLayout();
+  return Object.assign(state, { target: 100000, movesLeft: 50, moves: 50 }, extra);
+}
+const A = { x: 2, y: 0 };
+const B = { x: 2, y: 1 };
+
+test("ice: a gem clearing on it cracks it; two-layer ice survives the first hit", () => {
+  const state = runState({ ice: gridOf(0) });
+  state.ice[0][0] = 1;
+  state.ice[0][1] = 2;
+  state.ice[5][5] = 1;
+  g.trySwap(state, A, B);
+  assert.equal(state.ice[0][0], 0);
+  assert.equal(state.ice[0][1], 1);
+  assert.equal(state.ice[5][5], 1);
+  assert.equal(g.objectives(state).ice, 2);
+});
+
+test("ice: the level needs the score AND all ice gone", () => {
+  const state = runState({ ice: gridOf(0) });
+  state.ice[7][7] = 1;
+  state.target = 10; // reached by the first move
+  g.trySwap(state, A, B);
+  assert.equal(state.status, "play");
+  state.ice[7][7] = 0;
+  const [a, b] = g.findMove(state.board);
+  g.trySwap(state, a, b);
+  assert.equal(state.status, "levelclear");
+});
+
+test("slime: goes where a gem clears and spreads when a move clears none", () => {
+  const state = runState({ slime: gridOf(false) });
+  state.slime[0][1] = true; // cleared by the move
+  state.slime[6][6] = true; // far away
+  g.trySwap(state, A, B);
+  assert.equal(state.slime[0][1], false);
+  assert.equal(g.objectives(state).slime >= 1, true);
+
+  let grown = 0;
+  for (let seed = 1; seed <= 20; seed++) {
+    const grow = runState({ slime: gridOf(false) }); // slime far from the move: it may spread
+    grow.slime[7][7] = true;
+    grow.random = mulberry32(seed);
+    const res = g.trySwap(grow, A, B);
+    if (res.slime) {
+      grown++;
+      assert.equal(g.objectives(grow).slime, 2);
+      assert.ok(Math.abs(res.slime.x - 7) + Math.abs(res.slime.y - 7) === 1);
+    } else assert.equal(g.objectives(grow).slime, 1);
+  }
+  assert.ok(grown > 0 && grown < 20, `spread in ${grown} of 20 moves`);
+});
+
+test("slime: cannot grow onto rocks", () => {
+  const state = runState({ slime: gridOf(false), random: () => 0 });
+  state.board[7][6] = g.gem(g.ROCK, "rock");
+  state.board[6][7] = g.gem(g.ROCK, "rock");
+  state.slime[7][7] = true;
+  assert.equal(g.spreadSlime(state), null);
+});
+
+test("conveyor: rows slide one cell after every move, wrapping round", () => {
+  const state = runState();
+  state.layout.conveyors = [{ y: 5, dir: 1 }, { y: 3, dir: -1 }];
+  const row5 = state.board[5].map((c) => c.t);
+  const row3 = state.board[3].map((c) => c.t);
+  const probe = runState();
+  probe.layout.conveyors = state.layout.conveyors;
+  probe.board = g.cloneBoard(state.board);
+  g.conveyorShift(probe);
+  assert.deepEqual(probe.board[5].map((c) => c.t), [row5[7], ...row5.slice(0, 7)]);
+  assert.deepEqual(probe.board[3].map((c) => c.t), [...row3.slice(1), row3[0]]);
+  const res = g.trySwap(state, A, B);
+  assert.ok(res.conveyor && res.conveyor.rows.length === 2);
+  assert.ok(full(state.board));
+  assert.equal(g.findGroups(state.board).length, 0);
+});
+
+test("portal: linked cells swap from anywhere; other far swaps are rejected", () => {
+  const b = set(base(), [[0, 0, 4], [1, 0, 4], [2, 1, 3], [6, 6, 4]]);
+  const state = stateWith(b);
+  state.layout = Object.assign(g.emptyLayout(), { portals: [[2, 0, 6, 6]] });
+  const far = { x: 6, y: 6 };
+  assert.equal(g.trySwap(state, { x: 0, y: 3 }, { x: 5, y: 5 }).valid, false);
+  const res = g.trySwap(state, { x: 2, y: 0 }, far);
+  assert.equal(res.valid, true);
+  assert.equal(g.linkedCells(state.layout, A, far), true);
+  assert.deepEqual(g.portalPartner(state.layout, far), { x: 2, y: 0 });
+  assert.equal(g.portalPartner(state.layout, { x: 3, y: 3 }), null);
+  assert.ok(state.score >= 30);
+});
+
+test("portal: findMove also finds portal swaps", () => {
+  // a board with only one possible move, and it is a portal swap
+  const b = base();
+  assert.equal(g.findMove(b), null);
+  set(b, [[0, 0, 4], [1, 0, 4], [6, 6, 4]]);
+  const layout = Object.assign(g.emptyLayout(), { portals: [[2, 0, 6, 6]] });
+  assert.equal(g.isValidSwap(b, { x: 2, y: 0 }, { x: 6, y: 6 }), true);
+  const withoutPortal = g.findMove(b);
+  const m = g.findMove(b, layout);
+  assert.ok(m);
+  assert.ok(withoutPortal === null || m, "portal-aware search never finds less");
+});
+
+test("bombs: the countdown ticks every move; a bomb reaching 0 loses the level", () => {
+  const state = runState();
+  state.board[7][7].k = 2;
+  g.trySwap(state, A, B);
+  assert.equal(state.board[7][7].k, 1);
+  assert.equal(state.status, "play");
+  const [a, b] = g.findMove(state.board);
+  const res = g.trySwap(state, a, b);
+  assert.deepEqual(res.exploded, { x: 7, y: 7 });
+  assert.equal(state.status, "over");
+});
+
+test("bombs: matching a bomb gem defuses it", () => {
+  const state = runState();
+  state.board[0][0].k = 1; // part of the run that clears now
+  const res = g.trySwap(state, A, B);
+  assert.equal(res.exploded, null);
+  assert.equal(g.objectives(state).bombs, 0);
+  assert.equal(state.status, "play");
+});
+
+test("fruit: reaching the bottom row collects it for points and it never clears otherwise", () => {
+  const state = runState();
+  state.board[6][7] = g.gem(g.FRUIT);
+  state.board[7][7] = g.gem(2); // a normal gem below the fruit
+  const hammered = g.usePowerup(Object.assign(state, { powerups: { hammer: 1, bomb: 1, rainbow: 0 } }), "hammer", { x: 7, y: 6 });
+  assert.equal(hammered.valid, false); // fruits cannot be hammered
+  g.usePowerup(state, "bomb", { x: 6, y: 6 }); // the blast clears the gem below but not the fruit
+  assert.ok(state.score >= g.FRUIT_POINTS, "collected after falling to the bottom");
+  assert.equal(state.board.flat().filter((c) => c.t === g.FRUIT).length, 0);
+});
+
+test("fruit: a level needs every fruit, including the ones still to come", () => {
+  const state = runState({ fruitQueue: 1 });
+  state.target = 10;
+  g.trySwap(state, A, B);
+  assert.equal(state.status, "play");
+  assert.equal(g.objectives(state).fruit >= 1, true);
+  state.fruitQueue = 0;
+  const [a, b] = g.findMove(state.board);
+  g.trySwap(state, a, b);
+  assert.equal(state.status, "levelclear");
+});
+
+test("fruit: levels place fruits on the board and queue the rest", () => {
+  const c = g.levelConfig(241 + 29, "medium");
+  assert.ok(c.layout.fruits > c.layout.fruitCells.length || c.layout.fruits === c.layout.fruitCells.length);
+  const state = g.createState(mulberry32(4), 270);
+  assert.equal(state.board.flat().filter((x) => x.t === g.FRUIT).length, c.layout.fruitCells.length);
+  assert.equal(state.fruitQueue, c.layout.fruits - c.layout.fruitCells.length);
+  assert.equal(g.objectives(state).fruit, c.layout.fruits);
+});
+
+test("fruit: a colour gem cannot be swapped onto a fruit", () => {
+  const b = set(base(), [[3, 3, g.COLOR, "color"]]);
+  b[3][4] = g.gem(g.FRUIT);
+  assert.equal(g.isValidSwap(b, { x: 3, y: 3 }, { x: 4, y: 3 }), false);
+});
+
+test("fog: lifts around a clearing gem and does not change the rules", () => {
+  const state = runState({ fog: gridOf(true) });
+  g.trySwap(state, A, B);
+  assert.equal(state.fog[0][0], false);
+  assert.equal(state.fog[1][1], false); // next to a cleared gem
+  assert.equal(state.fog[6][6], true);
+});
+
+test("powerup stock is per difficulty: states start from the inventory they get", () => {
+  const easy = g.createState(mulberry32(1), 1, { hammer: 3 }, "easy");
+  const hard = g.createState(mulberry32(1), 1, { bomb: 2 }, "hard");
+  assert.equal(easy.powerups.hammer, 3);
+  assert.equal(easy.powerups.bomb, 0);
+  assert.equal(hard.powerups.bomb, 2);
+  assert.equal(hard.powerups.hammer, 0);
 });

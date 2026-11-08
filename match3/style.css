@@ -4,7 +4,7 @@
   --bg: #f3f2f2; --surface: #eae9e9; --text: #201f1d; --muted: #605d5d; --accent: #b68235;
   --border: rgba(32, 31, 29, 0.28);
   --board: #fbfaf8; --line: rgba(32, 31, 29, 0.1); --cell-a: #f4f2ee; --cell-b: #e8e5df;
-  --overlay: rgba(243, 242, 242, 0.86); --cage: #5b6470;
+  --overlay: rgba(243, 242, 242, 0.86); --cage: #5b6470; --fog: #b9bdc6;
 }
 
 :root[data-theme=dark] {
@@ -12,7 +12,7 @@
   --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
   --border: rgba(236, 232, 225, 0.28);
   --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
-  --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+  --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc; --fog: #4a4e57;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,7 +21,7 @@
     --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
     --border: rgba(236, 232, 225, 0.28);
     --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
-    --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+    --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc; --fog: #4a4e57;
   }
 }
 
@@ -166,7 +166,8 @@ progress {
 }
 
 .tools[hidden],
-#cages-wrap[hidden] {
+#objs-wrap[hidden],
+#diff[hidden] {
   display: none;
 }
 
@@ -175,12 +176,11 @@ progress {
   background: color-mix(in srgb, var(--accent) 30%, var(--surface));
 }
 
-#grid,
-#grid2 {
+#grid {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
-  width: 560px;
+  width: 420px;
   max-width: 94vw;
   margin: 0 auto 8px;
 }
@@ -211,11 +211,6 @@ progress {
 }
 
 @media (max-width: 520px) {
-  #grid,
-  #grid2 {
-    grid-template-columns: repeat(5, 1fr);
-  }
-
   .lvl {
     min-height: 48px;
   }
@@ -371,4 +366,108 @@ progress {
 @media (prefers-reduced-motion: reduce) {
   #moves.low, #board.low canvas { animation: none; }
   #board.low canvas { box-shadow: 0 0 10px 2px var(--accent); }
+}
+
+/* Difficulty choice and the world bar of the level overview */
+.diff-list {
+  display: grid;
+  gap: 8px;
+  width: min(420px, 94vw);
+  margin: 10px auto;
+}
+
+.diffbtn {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.diffbtn b {
+  font-size: 1.1rem;
+}
+
+.diffbtn span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.diffbtn small {
+  color: var(--accent);
+}
+
+.diffbtn.current {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+.worldbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(420px, 94vw);
+  margin: 10px auto 6px;
+}
+
+.worldbar > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.worldbar h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.worldbar p {
+  margin: 2px 0 0;
+}
+
+#objs b {
+  font-variant-numeric: tabular-nums;
+}
+
+#help-body .ice {
+  display: inline-block;
+  padding: 0 4px;
+  background: rgba(160, 220, 255, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+}
+
+#help-body .slime {
+  display: inline-block;
+  padding: 0 6px;
+  background: rgba(110, 200, 60, 0.55);
+  border-radius: 8px;
+}
+
+#help-body .belt {
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+#help-body .portal {
+  display: inline-block;
+  width: 1.3rem;
+  height: 1.3rem;
+  border: 3px solid #00bcd4;
+  border-radius: 50%;
+}
+
+#help-body .bomb b {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 6px;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #c0392b;
+  border-radius: 50%;
+}
+
+#help-body .fog {
+  display: inline-block;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--fog);
 }
