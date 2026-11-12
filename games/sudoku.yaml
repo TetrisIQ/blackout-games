@@ -1,0 +1,14 @@
+id: sudoku
+name: "Sudoku"
+description: "Classic Sudoku in four difficulties with pencil notes, undo and hints. Every puzzle is generated on your device, so there is no end to them."
+category: games
+type: files
+source:
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.3.1/sudoku.zip"
+sha256: 90c3993ded0181d23e4cdf34707028ab34a28d87c4b9d31827138a52bad357a0
+size_bytes: 65815
+license:
+  spdx: "MIT"
+content:
+  media: games
+  extract: zip
