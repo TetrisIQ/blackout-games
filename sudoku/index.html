@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sudoku</title>
+  <script>!function(){var r=document.documentElement;if(r.getAttribute("data-theme"))return;var s=null;try{s=localStorage.getItem("kit-theme")}catch(e){}if(!s&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)s="dark";r.setAttribute("data-theme",s||"light");r.setAttribute("data-theme-auto","")}()</script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Sudoku</h1>
+    <section id="diff" hidden>
+      <h2>Choose a difficulty</h2>
+      <p class="hint">Harder puzzles give fewer digits and need smarter techniques. Levels are made on your device, so there is always a new one.</p>
+      <div id="diff-list" class="diff-list"></div>
+    </section>
+    <section id="menu" hidden>
+      <p class="hint">Difficulty: <b id="menu-diff"></b> <button id="btn-menu-diff" type="button">Change</button></p>
+      <p id="menu-sub" class="hint"></p>
+      <p><button id="btn-play" type="button" class="primary big"></button></p>
+      <h2 id="grid-title">Solved levels</h2>
+      <div id="grid" class="grid"></div>
+    </section>
+    <section id="play" hidden>
+      <p class="info"><b id="diff-name"></b> · Level <span id="level">1</span> · Time <span id="time">0:00</span></p>
+      <div class="boardwrap">
+        <div id="board" class="board" role="grid" aria-label="Sudoku grid"></div>
+        <div class="veil paused-note">Paused<br><small>Tap to continue</small></div>
+        <div id="wait" class="veil" hidden>
+          <p>Making a level&hellip;</p>
+          <button id="btn-cancel" type="button">Cancel</button>
+        </div>
+        <div id="win" class="veil" hidden role="dialog" aria-labelledby="win-title">
+          <div class="card">
+            <h2 id="win-title">Solved!</h2>
+            <ul id="win-stats" class="stats"></ul>
+            <p class="bar">
+              <button id="btn-next" type="button" class="primary">Next level</button>
+              <button id="btn-change" type="button">Levels</button>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div id="pad" class="pad" aria-label="Digits"></div>
+      <div class="bar">
+        <button id="btn-notes" type="button" aria-pressed="false">Notes: off</button>
+        <button id="btn-undo" type="button">Undo</button>
+        <button id="btn-erase" type="button">Erase</button>
+        <button id="btn-hint" type="button">Hint</button>
+      </div>
+      <div class="bar">
+        <button id="btn-levels" type="button">Levels</button>
+        <button id="btn-pause" type="button">Pause</button>
+      </div>
+      <p class="hint kbd-hint">1-9 digit · Shift+digit note · N notes · U undo · H hint · Backspace erase · arrows move · P pause · ? how to play</p>
+    </section>
+    <p><button id="btn-help" type="button">How to play</button></p>
+  </main>
+  <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title"></h2>
+      <div id="help-body"></div>
+      <p id="help-dots" class="dots"></p>
+      <p class="nav">
+        <button id="help-back" type="button">Back</button>
+        <button id="help-next" type="button">Next</button>
+        <button id="help-close" type="button">Skip</button>
+      </p>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+id: sudoku
+title: Sudoku
+description: Classic Sudoku in four difficulties with pencil notes, undo and hints. Every puzzle is generated on your device, so there is no end to them.
+license: MIT
+version: 0.1.0
+entry: index.html
+controls:
+  - "Mouse / touch: select a cell, then a digit"
+  - "1-9: enter a digit (Shift+digit: note)"
+  - "N: notes on/off"
+  - "Backspace / Delete: erase"
+  - "Arrows / WASD: move"
+  - "U: undo"
+  - "H: hint"
+  - "P: pause"
+  - "?: how to play"

@@ -1,0 +1,577 @@
+/* Theme: follows the kit portal (it sets data-theme on the page); without it the saved kit choice or the system. */
+:root {
+  color-scheme: light;
+  --bg: #f3f2f2; --surface: #eae9e9; --text: #201f1d; --muted: #605d5d; --accent: #b68235;
+  --border: rgba(32, 31, 29, 0.28);
+  --board: #fbfaf8; --line: rgba(32, 31, 29, 0.1); --cell-a: #f4f2ee; --cell-b: #e8e5df;
+  --overlay: rgba(243, 242, 242, 0.86); --cage: #5b6470;
+  --sel: #e9d3a4; --peer: #ece9e2; --same: #f1dcae; --bad: #c0392b; --bad-bg: #f7d9d4; --user: #8a5d14; --thick: rgba(32, 31, 29, 0.75);
+}
+
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
+  --border: rgba(236, 232, 225, 0.28);
+  --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
+  --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+  --sel: #5a4721; --peer: #1f1e1b; --same: #4a3b1c; --bad: #ff8574; --bad-bg: #4a2420; --user: #e8b866; --thick: rgba(236, 232, 225, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
+    --border: rgba(236, 232, 225, 0.28);
+    --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
+    --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+    --sel: #5a4721; --peer: #1f1e1b; --same: #4a3b1c; --bad: #ff8574; --bad-bg: #4a2420; --user: #e8b866; --thick: rgba(236, 232, 225, 0.7);
+  }
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+main {
+  text-align: center;
+  padding: 8px 12px;
+  max-width: 100%;
+}
+
+h1 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  font-weight: 600;
+}
+
+p {
+  margin: 0.4rem 0;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:active {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* On-screen controls only where there is no keyboard. */
+.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse), (max-width: 640px) {
+  .touch-only {
+    display: flex;
+  }
+
+  .kbd-hint {
+    display: none;
+  }
+
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+button.primary {
+  border-color: var(--accent);
+}
+
+.info {
+  font-variant-numeric: tabular-nums;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* The board is as large as the window allows (the controls below it need about 380px), always with some margin. */
+.boardwrap {
+  --bs: max(270px, min(100vw - 24px, 100vh - 380px, 540px));
+  --bs: max(270px, min(100vw - 24px, 100dvh - 380px, 540px));
+  position: relative;
+  width: var(--bs);
+  margin: 0 auto;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(9, 1fr);
+  width: var(--bs);
+  height: var(--bs);
+  background: var(--board);
+  border: 2px solid var(--thick);
+}
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-size: calc(var(--bs) / 15);
+  line-height: 1;
+}
+
+.cell:hover {
+  border-color: var(--line);
+}
+
+/* Thick lines between the 3x3 boxes; the outer frame is the board's border. */
+.cell:nth-child(9n + 3), .cell:nth-child(9n + 6) {
+  border-right: 2px solid var(--thick);
+}
+
+.cell:nth-child(n + 19):nth-child(-n + 27), .cell:nth-child(n + 46):nth-child(-n + 54) {
+  border-bottom: 2px solid var(--thick);
+}
+
+.cell:nth-child(9n) {
+  border-right: 0;
+}
+
+.cell:nth-child(n + 73) {
+  border-bottom: 0;
+}
+
+.cell .v {
+  grid-area: 1 / 1;
+  color: var(--user);
+}
+
+.cell.given .v {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.cell .n {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 6%;
+  font-size: calc(var(--bs) / 38);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.cell .n i {
+  font-style: normal;
+  display: grid;
+  place-items: center;
+}
+
+.cell .v:not(:empty) + .n {
+  display: none;
+}
+
+.cell.peer {
+  background: var(--peer);
+}
+
+.cell.same {
+  background: var(--same);
+}
+
+.cell.sel {
+  background: var(--sel);
+}
+
+.cell.bad {
+  background: var(--bad-bg);
+}
+
+.cell.bad .v {
+  color: var(--bad);
+}
+
+.cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+.board.paused .cell > *, .board.loading .cell > * {
+  visibility: hidden;
+}
+
+/* Over the board: paused, waiting for a puzzle, solved. */
+.veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  background: var(--overlay);
+  font-size: 1.3rem;
+  z-index: 2;
+}
+
+.veil[hidden] {
+  display: none;
+}
+
+.paused-note {
+  display: none;
+  pointer-events: none; /* a tap goes through to the board, which resumes */
+  text-align: center;
+}
+
+.board.paused + .paused-note {
+  display: grid;
+}
+
+.paused-note small {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.veil .card {
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 18px;
+  width: min(86%, 300px);
+}
+
+.veil button {
+  font-size: 1rem;
+}
+
+.veil h2 {
+  margin: 0 0 6px;
+  font-size: 1.4rem;
+}
+
+.stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.stats li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Digit pad: one row under the board, with how many of each digit are still missing. */
+.pad {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 4px;
+  width: max(270px, min(100vw - 24px, 100vh - 380px, 540px));
+  width: max(270px, min(100vw - 24px, 100dvh - 380px, 540px));
+  margin: 10px auto 0;
+}
+
+.digit {
+  -webkit-touch-callout: none;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  padding: 2px 0;
+  min-width: 0;
+  min-height: 48px;
+  line-height: 1.1;
+}
+
+.digit b {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.digit small {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.pad.notes .digit {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+.pad.notes .digit b {
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+#btn-notes[aria-pressed=true] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+#play[hidden], #diff[hidden], #menu[hidden] {
+  display: none;
+}
+
+/* Difficulty choice */
+#diff {
+  width: min(100vw - 40px, 420px);
+  margin: 0 auto;
+}
+
+#diff h2 {
+  margin: 0.4rem 0;
+  font-size: 1.25rem;
+}
+
+.diff-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.diffbtn {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 14px;
+  min-height: 64px;
+}
+
+.diffbtn b {
+  font-size: 1.1rem;
+}
+
+.diffbtn small {
+  color: var(--muted);
+}
+
+.diffbtn.current {
+  border-color: var(--accent);
+}
+
+/* How to play */
+#help {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+#help[hidden] {
+  display: none;
+}
+
+#help .card {
+  width: min(440px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+#help h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+#help-body p {
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+#help-body .demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 0;
+  background: var(--board);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+#help-body .dcell {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border: 1px solid var(--thick);
+  font-size: 1.8rem;
+}
+
+#help-body .dcell.user {
+  color: var(--user);
+}
+
+#help-body .dn {
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--muted);
+  text-align: center;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+#help .dots {
+  text-align: center;
+  margin: 8px 0;
+  color: var(--muted);
+  letter-spacing: 0.3em;
+}
+
+#help .dots b {
+  color: var(--accent);
+}
+
+#help .nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+#help .nav #help-next {
+  border-color: var(--accent);
+  flex: 1;
+}
+
+#help-body kbd {
+  font: inherit;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--surface);
+}
+
+/* On-screen controls only where there is no keyboard: the pad is needed everywhere, so only the hint line goes. */
+@media (pointer: coarse), (max-width: 640px) {
+  .kbd-hint {
+    display: none;
+  }
+
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .digit {
+    min-width: 0;
+  }
+}
+
+/* Level overview */
+#menu {
+  width: min(100vw - 24px, 560px);
+  margin: 0 auto;
+}
+
+#menu h2 {
+  margin: 1rem 0 0.2rem;
+  font-size: 1.1rem;
+}
+
+button.big {
+  font-size: 1.25rem;
+  padding: 12px 28px;
+  min-width: 14rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.lvl {
+  padding: 0;
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lvl.done {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lvl.done::after {
+  content: " \2713";
+  font-size: 0.75em;
+}
+
+/* While a level is being made, nothing of the old board is shown or usable. */
+#play.waiting .pad, #play.waiting .bar, #play.waiting .info {
+  visibility: hidden;
+}

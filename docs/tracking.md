@@ -14,15 +14,17 @@ Jedes Event trägt `game` (= `GAME_ID`).
 
 | Event | Spiele | Wichtige Properties |
 |-------|--------|---------------------|
-| `difficulty_chosen` | tap-match, match3 | `difficulty`, Fortschritt |
-| `level_start` | tap-match, match3 | `level`, `difficulty`, `world`, Level-Parameter (`tiles`, `tile_types`, `layers` bzw. `moves`, `target`), Powerup-Bestand |
-| `level_end` | tap-match, match3 | `outcome` (`won` / `lost` / `abandoned`), `active_s`, `picks` / `swaps`, Helfer-Nutzung, siehe unten |
-| `powerup_used` | tap-match, match3 | `kind`, `level`, Kontext (Ablage / Restzüge) |
+| `difficulty_chosen` | tap-match, match3, sudoku | `difficulty`, Fortschritt |
+| `level_start` | tap-match, match3, sudoku | `level`, `difficulty`, `world`, Level-Parameter (`tiles`, `tile_types`, `layers` bzw. `moves`, `target`), Powerup-Bestand; sudoku: `level` (Nummer je Stufe), `replay`, `clues`, `source` (`pool` / `live` / `kept` / `replay`), kein `world` |
+| `level_end` | tap-match, match3, sudoku | `outcome` (`won` / `lost` / `abandoned`), `active_s`, `picks` / `swaps`, Helfer-Nutzung, siehe unten |
+| `powerup_used` | tap-match, match3, sudoku | `kind`, `level`, Kontext (Ablage / Restzüge); sudoku: `kind: hint`, `filled` |
 | `game_start`, `game_end` | tetris, snake | `outcome` (`over` / `won` / `abandoned`), `score`, `active_s`, `lines`+`level` bzw. `length` |
 
 `level_end` bei **tap-match** (für "ist es zu leicht?"): `tray_peak` (höchster Ablagestand), `tray_avg` (Ø Tiles in der Ablage nach einem Zug), `tray_ge4_picks` (Züge mit ≥4 Tiles in der Ablage: ohne die Leiste zu brauchen bleibt das bei 0), `free_avg` (Ø freie Tiles zur Auswahl), `matches`, `clean_triples`, `denied_taps`, `picks` vs `tiles_total`, `used_undo|hint|shuffle|slot`, `first_clear`. Ein verlorenes Level bleibt offen, bis man es verlässt, weil Undo es noch retten kann.
 
 `level_end` bei **match3**: `moves` / `moves_used`, `score` vs `target`, `stars`, `cause` (`moves` / `bomb`) bei Niederlage, `invalid_swaps`, `hints`, `auto_shuffles`, `used_hammer|bomb|rainbow`.
+
+`level_end` bei **sudoku** (`won` / `abandoned`, kein `lost`; `replay: true` bei erneut gespielten gelösten Leveln): `difficulty`, `clues` (Vorgaben), `level`, `replay`, `active_s`, `hints`, `undos`, `notes_used` (Anzahl Notiz-Eingaben), `filled_pct` (Anteil der leeren Zellen, die gefüllt waren), beim späteren `won` nach dem Schließen der Seite `after_leave: true` (zum Entdoppeln). Wer den Tab schließt, sendet `abandoned`, das Rätsel bleibt aber gespeichert und kann fortgesetzt werden (dann folgt später ein weiteres `level_end`, ohne neues `level_start`). Wer ein anderes Level startet, während eines in Arbeit ist, sendet `abandoned` (bei einem neuen Level endet damit die Serie); der Wechsel in die Übersicht allein tut das nicht.
 
 `active_s` zählt nur echte Spielzeit (ohne Pause, Menü, versteckten Tab). `abandoned` wird beim Verlassen des Levels oder Schließen der Seite (`pagehide`) gesendet; stirbt der Browser vorher (Handy im Hintergrund beendet), geht dieses Event verloren.
 

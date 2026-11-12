@@ -22,6 +22,7 @@ Ordner eines Spiels öffnen und `index.html` im Browser öffnen, oder:
 | [snake](snake/) | Snake |
 | [match3](match3/) | Match 3 |
 | [tap-match](tap-match/) | Tap Match |
+| [sudoku](sudoku/) | Sudoku |
 
 ## Spielebibliothek im Browser (GitHub Pages)
 Dieselbe Bibliothek wie im kit-Portal (`/games/`), mit allen Spielen spielbar und als App auf dem Handy installierbar (PWA, Spiele lassen sich offline speichern; GitHub Pages ist HTTPS). Der Hub (Vorlage, Service Worker, Manifest, CSS) kommt aus dem kit-Repo (`kit/assets/games/`, `kit/assets/portal/`), die Seite sieht also immer aus wie im Portal. Nur die Icons liegen in `site/`.
