@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { root, sha256, buildManifests } from "./lib.mjs";
+import { root, sha256, buildManifests, versionMismatches, tagVersion } from "./lib.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith("--") ? [...acc, [a.slice(2), a.startsWith("--verify") ? true : all[i + 1]]] : acc), []),
@@ -29,6 +29,12 @@ if (out === root || out.startsWith(root + "/")) {
 const { files, packs } = buildManifests(repo, args.tag);
 
 if (args.verify) {
+  const wrong = versionMismatches(args.tag);
+  if (wrong.length) {
+    console.error(`game.yml version != ${tagVersion(args.tag) ?? args.tag} (the release tag) in: ${wrong.join(", ")}`);
+    console.error(`Run: node tools/update-catalog.mjs --tag ${args.tag}   then commit the changes and move the tag.`);
+    process.exit(1);
+  }
   const stale = Object.entries(files).filter(([name, text]) => !existsSync(join(root, name)) || readFileSync(join(root, name), "utf8") !== text);
   if (stale.length) {
     console.error(`The catalog in the repository does not match the ${args.tag} build:\n  ${stale.map(([n]) => n).join("\n  ")}`);

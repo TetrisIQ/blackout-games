@@ -18,6 +18,7 @@ function checkGame(dir) {
       for (const k of KEYS) if (!(k in meta)) errors.push(`missing key ${k}`);
       if (meta.id !== dir) errors.push(`id "${meta.id}" != folder "${dir}"`);
       if (meta.id && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(meta.id)) errors.push("id must be kebab-case");
+      if (meta.version && !/^\d+\.\d+\.\d+$/.test(meta.version)) errors.push("version must be X.Y.Z");
       if (meta.license === "") errors.push("license must not be empty");
       if (meta.entry && !existsSync(join(path, meta.entry))) errors.push(`entry ${meta.entry} not found`);
       if (!Array.isArray(meta.controls) || meta.controls.length === 0) errors.push("controls must be a non-empty list");

@@ -1,6 +1,6 @@
 // Shared helpers for the tools in this folder. No dependencies.
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createZip } from "./zip.mjs";
@@ -36,6 +36,31 @@ export function listDirs() {
 // Folder names of real games (everything except template/).
 export function listGames() {
   return listDirs().filter((d) => d !== "template");
+}
+
+// --- Versions: the release tag is the single source of truth ----------------
+
+// "v0.3.1" -> "0.3.1"; null if the tag is not a plain release tag.
+export const tagVersion = (tag) => (/^v\d+\.\d+\.\d+$/.test(tag) ? tag.slice(1) : null);
+
+// Sets `version:` in every game.yml (not template/) to the tag's version. Returns the ids that changed.
+export function stampVersions(tag) {
+  const version = tagVersion(tag);
+  if (!version) throw new Error(`tag "${tag}" is not vX.Y.Z`);
+  const changed = [];
+  for (const id of listGames()) {
+    const file = join(root, id, META_FILE);
+    const text = readFileSync(file, "utf8");
+    const next = text.replace(/^version:.*$/m, `version: ${version}`);
+    if (next !== text) { writeFileSync(file, next); changed.push(id); }
+  }
+  return changed;
+}
+
+// Ids whose game.yml version differs from the tag's version.
+export function versionMismatches(tag) {
+  const version = tagVersion(tag);
+  return listGames().filter((id) => parseYaml(readFileSync(join(root, id, META_FILE), "utf8")).version !== version);
 }
 
 // --- Packages and kit manifests --------------------------------------------

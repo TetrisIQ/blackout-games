@@ -52,7 +52,7 @@ oder direkt aus einem lokalen Checkout, der an Ort und Stelle gelesen wird:
 Die Manifeste im Repo (`games/<id>.yaml`) zeigen auf die Zips des jeweils letzten Releases, `catalog.yaml` ist die Katalog-Beschreibung. Heruntergeladen wird immer von der GitHub-Release-URL im Manifest; der Download braucht also ein öffentlich erreichbares Release. Danach `index.html` im Ordner `<data-dir>/media/games/<id>/` im Browser öffnen (oder über das Spiele-Hub des kit-Portals).
 
 ## Release
-1. `node tools/update-catalog.mjs --tag vX.Y.Z` schreibt `catalog.yaml` und `games/<id>.yaml` mit den Prüfsummen der (reproduzierbaren) Zips.
+1. `node tools/update-catalog.mjs --tag vX.Y.Z` setzt `version` in allen `game.yml` auf den Tag (ohne `v`), damit Spielversion und Release übereinstimmen, und schreibt `catalog.yaml` und `games/<id>.yaml` mit den Prüfsummen der (reproduzierbaren) Zips.
 2. Committen, `git tag vX.Y.Z`, Branch und Tag pushen.
 3. Der Workflow `release.yml` prüft alles, baut `<id>.zip` je Spiel sowie `catalog.tar.gz` (+ `.sha256`) mit `--verify` (bricht ab, wenn die eingecheckten Manifeste nicht zum Tag passen), validiert den Katalog und das Repo mit dem echten `kit catalog check` und veröffentlicht alles als GitHub-Release.
 
