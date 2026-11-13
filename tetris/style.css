@@ -4,7 +4,7 @@
   --bg: #f3f2f2; --surface: #eae9e9; --text: #201f1d; --muted: #605d5d; --accent: #b68235;
   --border: rgba(32, 31, 29, 0.28);
   --board: #fbfaf8; --line: rgba(32, 31, 29, 0.1); --cell-a: #f4f2ee; --cell-b: #e8e5df;
-  --overlay: rgba(243, 242, 242, 0.86); --cage: #5b6470;
+  --overlay: rgba(243, 242, 242, 0.86); --cage: #5b6470; --warn: #c8323a;
 }
 
 :root[data-theme=dark] {
@@ -12,7 +12,7 @@
   --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
   --border: rgba(236, 232, 225, 0.28);
   --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
-  --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+  --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc; --warn: #ff6b6b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,7 +21,7 @@
     --bg: #1a1917; --surface: #252320; --text: #ece8e1; --muted: #a09a92; --accent: #d6a04c;
     --border: rgba(236, 232, 225, 0.28);
     --board: #100f0e; --line: rgba(236, 232, 225, 0.08); --cell-a: #1d1c1a; --cell-b: #151412;
-    --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc;
+    --overlay: rgba(26, 25, 23, 0.84); --cage: #cfd8dc; --warn: #ff6b6b;
   }
 }
 
@@ -47,6 +47,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 main {
@@ -125,6 +126,12 @@ button:disabled {
     min-height: 44px;
     min-width: 44px;
   }
+
+  /* No button pad: the board gets the room, gestures play it. */
+  #game {
+    height: min(72vh, 600px, 124vw);
+    height: min(72dvh, 600px, 124vw);
+  }
 }
 
 .layout {
@@ -132,6 +139,11 @@ button:disabled {
   gap: 0.8rem;
   justify-content: center;
   align-items: flex-start;
+}
+
+/* The preview bar sits left of the board by default (Settings). */
+.layout[data-side=left] {
+  flex-direction: row-reverse;
 }
 
 #game {
@@ -168,21 +180,8 @@ aside strong {
   margin-top: 8px;
 }
 
-.pad {
-  justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.pad button {
-  flex: 1;
-  max-width: 72px;
-  min-height: 56px;
-  font-size: 1.4rem;
-}
-
 /* How to play */
-#help {
+#help, #screen {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -192,11 +191,11 @@ aside strong {
   background: rgba(0, 0, 0, 0.55);
 }
 
-#help[hidden] {
+#help[hidden], #screen[hidden] {
   display: none;
 }
 
-#help .card {
+#help .card, #screen .card {
   width: min(440px, 100%);
   max-height: 92vh;
   overflow: auto;
@@ -207,7 +206,7 @@ aside strong {
   text-align: left;
 }
 
-#help h2 {
+#help h2, #screen h2 {
   margin: 0 0 8px;
   font-size: 1.3rem;
 }
@@ -293,4 +292,172 @@ aside strong {
   border-radius: 4px;
   padding: 0 5px;
   background: var(--surface);
+}
+
+/* Worlds: each one re-tints the page in both themes (the game sets data-world on the root). */
+:root[data-world=lava] {
+  --bg: #f6ebe5; --surface: #efe0d8; --accent: #c4501b; --board: #fbeee6; --line: rgba(120, 40, 10, 0.12);
+  --overlay: rgba(246, 235, 229, 0.86);
+}
+
+:root[data-theme=dark][data-world=lava] {
+  --bg: #1d1210; --surface: #2a1a15; --accent: #ff7a3a; --board: #160b08; --line: rgba(255, 140, 80, 0.1);
+  --overlay: rgba(29, 18, 16, 0.84);
+}
+
+:root[data-world=night] {
+  --bg: #e8eaf3; --surface: #dde0ee; --accent: #4a5bc4; --board: #eef0f9; --line: rgba(30, 40, 110, 0.12);
+  --overlay: rgba(232, 234, 243, 0.86);
+}
+
+:root[data-theme=dark][data-world=night] {
+  --bg: #0b0c16; --surface: #151728; --accent: #8fa3ff; --board: #06070f; --line: rgba(143, 163, 255, 0.1);
+  --overlay: rgba(11, 12, 22, 0.84);
+}
+
+/* Boss */
+#boss-name {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.hpbar {
+  width: 84px;
+  height: 10px;
+  background: var(--board);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.hpbar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--warn);
+  transition: width 0.2s;
+}
+
+/* Menu, level map and result */
+#screen h2 {
+  text-align: center;
+}
+
+#screen .sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 10px;
+}
+
+#screen .col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+#screen .col button.main {
+  border-color: var(--accent);
+  padding: 10px 14px;
+  font-size: 1.05rem;
+}
+
+#screen .worldbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#screen .worldbar h2 {
+  flex: 1;
+  margin: 0;
+}
+
+#screen .levels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin: 12px 0;
+}
+
+#screen .levels button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 2px;
+  line-height: 1.2;
+}
+
+#screen .levels button span {
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+#screen .levels button.boss {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 10px;
+  border-color: var(--warn);
+}
+
+#screen .stars {
+  text-align: center;
+  font-size: 2.2rem;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  margin: 6px 0;
+}
+
+#screen .row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+#screen .row button {
+  flex: 1;
+}
+
+#screen .row button.main {
+  border-color: var(--accent);
+}
+
+/* Phones held sideways: board and stats side by side, no title, menu buttons in the corner. */
+@media (max-height: 520px) and (orientation: landscape) {
+  main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+
+  h1, #mode, .kbd-hint {
+    display: none;
+  }
+
+  #game {
+    height: min(94vh, 600px);
+    height: min(94dvh, 600px);
+  }
+
+  main > p:last-child {
+    position: fixed;
+    top: 6px;
+    left: 6px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+#screen button[aria-pressed=true] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  font-weight: 600;
 }

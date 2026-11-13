@@ -2,7 +2,7 @@ id: snake
 title: Snake
 description: Steer a growing snake around a 20x20 board, eat food and avoid walls and your own tail.
 license: MIT
-version: 0.1.0
+version: 0.4.0
 entry: index.html
 controls:
   - "Arrow keys / WASD: steer"

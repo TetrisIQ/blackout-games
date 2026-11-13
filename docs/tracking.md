@@ -15,12 +15,14 @@ Jedes Event trägt `game` (= `GAME_ID`).
 | Event | Spiele | Wichtige Properties |
 |-------|--------|---------------------|
 | `difficulty_chosen` | tap-match, match3, sudoku | `difficulty`, Fortschritt |
-| `level_start` | tap-match, match3, sudoku | `level`, `difficulty`, `world`, Level-Parameter (`tiles`, `tile_types`, `layers` bzw. `moves`, `target`), Powerup-Bestand; sudoku: `level` (Nummer je Stufe), `replay`, `clues`, `source` (`pool` / `live` / `kept` / `replay`), kein `world` |
-| `level_end` | tap-match, match3, sudoku | `outcome` (`won` / `lost` / `abandoned`), `active_s`, `picks` / `swaps`, Helfer-Nutzung, siehe unten |
+| `level_start` | tap-match, match3, sudoku, tetris | `level`, `difficulty`, `world`, Level-Parameter (`tiles`, `tile_types`, `layers` bzw. `moves`, `target`), Powerup-Bestand; sudoku: `level` (Nummer je Stufe), `replay`, `clues`, `source` (`pool` / `live` / `kept` / `replay`), kein `world` |
+| `level_end` | tap-match, match3, sudoku, tetris | `outcome` (`won` / `lost` / `abandoned`), `active_s`, `picks` / `swaps`, Helfer-Nutzung, siehe unten |
 | `powerup_used` | tap-match, match3, sudoku | `kind`, `level`, Kontext (Ablage / Restzüge); sudoku: `kind: hint`, `filled` |
-| `game_start`, `game_end` | tetris, snake | `outcome` (`over` / `won` / `abandoned`), `score`, `active_s`, `lines`+`level` bzw. `length` |
+| `game_start`, `game_end` | tetris (nur Endlos), snake | `outcome` (`over` / `won` / `abandoned`), `score`, `active_s`, `lines`+`level` bzw. `length` |
 
 `level_end` bei **tap-match** (für "ist es zu leicht?"): `tray_peak` (höchster Ablagestand), `tray_avg` (Ø Tiles in der Ablage nach einem Zug), `tray_ge4_picks` (Züge mit ≥4 Tiles in der Ablage: ohne die Leiste zu brauchen bleibt das bei 0), `free_avg` (Ø freie Tiles zur Auswahl), `matches`, `clean_triples`, `denied_taps`, `picks` vs `tiles_total`, `used_undo|hint|shuffle|slot`, `first_clear`. Ein verlorenes Level bleibt offen, bis man es verlässt, weil Undo es noch retten kann.
+
+`level_start` / `level_end` bei **tetris** (Kampagne; Endlos sendet weiter `game_start` / `game_end`): `world` (`standard` / `lava` / `night`), `level` (1-10, der Boss ist 11), `boss`; bei `level_end` zusätzlich `outcome` (`won` nur beim Boss, `lost` / `abandoned`; ein Level ohne Boss endet immer mit `lost` und wird über `stars` bewertet), `score`, `lines`, `stars` (0-3), `active_s`. Ein Level mit `stars: 0` zählt als nicht bestanden.
 
 `level_end` bei **match3**: `moves` / `moves_used`, `score` vs `target`, `stars`, `cause` (`moves` / `bomb`) bei Niederlage, `invalid_swaps`, `hints`, `auto_shuffles`, `used_hammer|bomb|rainbow`.
 

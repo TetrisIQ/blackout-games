@@ -2,7 +2,7 @@ id: match3
 title: Match 3
 description: Swap neighbouring gems on an 8x8 board to line up three or more, build special gems and chain cascades. Four difficulties and ten worlds, each with a new element - rocks, cages, ice, conveyors, slime, portals, countdown bombs, fruit and fog.
 license: MIT
-version: 0.1.0
+version: 0.4.0
 entry: index.html
 controls:
   - "Mouse/touch: click two neighbouring gems or drag a gem"

@@ -10,14 +10,19 @@
 <body>
   <main>
     <h1>Tetris</h1>
+    <p id="mode" class="hint"></p>
     <div class="layout">
       <canvas id="game" width="300" height="600"></canvas>
       <aside>
         <p>Next</p>
         <canvas id="next" width="120" height="120"></canvas>
+        <div id="bossbox" hidden>
+          <p id="boss-name"></p>
+          <div class="hpbar"><i id="boss-hp"></i></div>
+        </div>
         <p>Score<br><strong id="score">0</strong></p>
         <p>Lines<br><strong id="lines">0</strong></p>
-        <p>Level<br><strong id="level">1</strong></p>
+        <p id="level-row">Level<br><strong id="level">1</strong></p>
         <p>Best<br><strong id="best">0</strong></p>
         <div class="bar touch-only">
           <button id="btn-pause" type="button">Pause</button>
@@ -25,16 +30,12 @@
         </div>
       </aside>
     </div>
-    <div class="pad touch-only" aria-label="Controls">
-      <button data-act="left" data-repeat type="button" aria-label="Left">&larr;</button>
-      <button data-act="rotate" type="button" aria-label="Rotate">&#x27F3;</button>
-      <button data-act="right" data-repeat type="button" aria-label="Right">&rarr;</button>
-      <button data-act="down" data-repeat type="button" aria-label="Soft drop">&darr;</button>
-      <button data-act="drop" type="button" aria-label="Hard drop">&#x2913;</button>
-    </div>
-    <p class="hint kbd-hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart · ? how to play</p>
-    <p><button id="btn-help" type="button">How to play</button></p>
+    <p class="hint kbd-hint">←/→ move · ↑ rotate · ↓ soft drop · Space hard drop · P pause · R restart · Esc menu · ? how to play</p>
+    <p><button id="btn-menu" type="button">Menu</button> <button id="btn-help" type="button">How to play</button></p>
   </main>
+  <div id="screen" hidden role="dialog" aria-modal="true">
+    <div class="card" id="screen-card"></div>
+  </div>
   <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
     <div class="card">
       <h2 id="help-title"></h2>

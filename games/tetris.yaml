@@ -1,12 +1,12 @@
 id: tetris
 name: "Tetris"
-description: "Falling-blocks puzzle on a 10x20 board with ghost piece, next preview and levels."
+description: "Falling-blocks puzzle on a 10x20 board with a campaign (Standard, Lava and Night worlds with ten levels and a boss each, rated in stars) and a classic endless mode."
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.3.1/tetris.zip"
-sha256: d13adade453a1e578efde483948bbbcf28ee82abc4c1e50dfe4acdc07d242d73
-size_bytes: 26094
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/tetris.zip"
+sha256: cbb47806e862089cd4e857fb1e768942418fdf3cd2c13c5a6513638985988563
+size_bytes: 60732
 license:
   spdx: "MIT"
 content:
