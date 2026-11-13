@@ -1,6 +1,6 @@
 id: tetris
 title: Tetris
-description: Falling-blocks puzzle on a 10x20 board with ghost piece, next preview and levels.
+description: Falling-blocks puzzle on a 10x20 board with a campaign (Standard, Lava and Night worlds with ten levels and a boss each, rated in stars) and a classic endless mode.
 license: MIT
 version: 0.1.0
 entry: index.html
@@ -11,5 +11,6 @@ controls:
   - "Space: hard drop"
   - "P: pause"
   - "R: restart"
+  - "Esc: menu"
   - "?: how to play"
-  - "Touch: on-screen buttons"
+  - "Touch: tap rotate, drag move, drag down soft drop, flick down hard drop"
