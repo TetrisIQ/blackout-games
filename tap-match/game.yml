@@ -2,7 +2,7 @@ id: tap-match
 title: Tap Match
 description: Tap free tiles from a stacked board into a 7-slot tray; three equal tiles vanish. Clear the board before the tray overflows. 300 levels in 6 worlds with new tiles as you go.
 license: MIT
-version: 0.1.0
+version: 0.4.0
 entry: index.html
 controls:
   - "Mouse / touch: tap a free tile"
