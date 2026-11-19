@@ -296,3 +296,15 @@ test("every campaign level ends in reasonable time (bot, 1 s per piece)", () => 
     }
   }
 });
+
+test("difficulty scales level pace", () => {
+  const { levelConfig, bossConfig } = require("../game.js");
+  const easy = levelConfig(1, 5, "easy");
+  const normal = levelConfig(1, 5);
+  const hard = levelConfig(1, 5, "hard");
+  assert.ok(easy.rampMs > normal.rampMs && normal.rampMs > hard.rampMs);
+  assert.ok(easy.baseInterval > hard.baseInterval);
+  assert.ok(easy.garbage.firstMs > hard.garbage.firstMs);
+  assert.deepEqual(easy.stars, hard.stars);
+  assert.ok(bossConfig(0, "hard").bossInfo.attack0 < bossConfig(0, "easy").bossInfo.attack0);
+});

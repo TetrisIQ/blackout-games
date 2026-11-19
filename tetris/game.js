@@ -70,7 +70,7 @@ function collides(board, shape, px, py) {
 
 // opts: { world, level } starts a campaign level (level BOSS_LEVEL is the boss); without opts it is the endless game.
 function createState(random = Math.random, opts = null) {
-  const cfg = opts ? (opts.level === BOSS_LEVEL ? bossConfig(opts.world) : levelConfig(opts.world, opts.level)) : null;
+  const cfg = opts ? (opts.level === BOSS_LEVEL ? bossConfig(opts.world, opts.difficulty) : levelConfig(opts.world, opts.level, opts.difficulty)) : null;
   const state = {
     board: Array.from({ length: ROWS }, () => Array(COLS).fill(null)),
     piece: null,
@@ -226,6 +226,26 @@ const WORLDS = [
   { id: "night", name: "Night", lines: [[10, 20, 38], [5, 10, 18]], boss: { id: "shadow", name: "The Shadow", hp: 42, attacks: ["blackout", "fake", "rise"] } },
 ];
 
+// Difficulty scales the pace of a level: fall speed, how fast pressure builds, garbage and boss attacks, bag bias.
+const DIFFICULTIES = {
+  easy: { name: "Easy", interval: 1.3, ramp: 1.4, garbage: 1.4, bias: 0.6 },
+  normal: { name: "Normal", interval: 1, ramp: 1, garbage: 1, bias: 1 },
+  hard: { name: "Hard", interval: 0.8, ramp: 0.75, garbage: 0.75, bias: 1.25 },
+};
+
+function applyDifficulty(cfg, name) {
+  const d = DIFFICULTIES[name] || DIFFICULTIES.normal;
+  cfg.difficulty = DIFFICULTIES[name] ? name : "normal";
+  cfg.baseInterval = Math.round(cfg.baseInterval * d.interval);
+  cfg.minInterval = Math.round(cfg.minInterval * d.interval);
+  cfg.rampMs = Math.round(cfg.rampMs * d.ramp);
+  cfg.bias *= d.bias;
+  const g = cfg.garbage;
+  if (g) { g.startMs *= d.ramp; g.firstMs *= d.garbage; g.minMs *= d.garbage; }
+  if (cfg.bossInfo) { cfg.bossInfo.attack0 *= d.garbage; cfg.bossInfo.attackMin *= d.garbage; }
+  return cfg;
+}
+
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // Points a typical player has after clearing `rows` rows: doubles at the rising level multiplier plus about
@@ -236,7 +256,7 @@ function scoreForLines(rows) {
   return Math.round(score / 50) * 50;
 }
 
-function levelConfig(world, n) {
+function levelConfig(world, n, difficulty = "normal") {
   const t = (n - 1) / (LEVELS_PER_WORLD - 1);
   const id = WORLDS[world].id;
   // Star goals are set in rows cleared (first level -> last level of the world) and turned into points.
@@ -256,12 +276,12 @@ function levelConfig(world, n) {
   if (id === "lava") cfg.garbage = { startMs: lerp(25000, 15000, t), firstMs: lerp(7000, 4000, t), minMs: 1000, decay: 0.97 };
   else cfg.garbage = surge;
   if (id === "night") cfg.night = { minRows: Math.round(lerp(14, 6, t)) };
-  return cfg;
+  return applyDifficulty(cfg, difficulty);
 }
 
-function bossConfig(world) {
+function bossConfig(world, difficulty = "normal") {
   const info = WORLDS[world].boss;
-  return {
+  return applyDifficulty({
     world, level: BOSS_LEVEL, boss: true,
     bossInfo: { ...info, attack0: 12000, attackMin: 4000, attackDecay: 0.95 },
     baseInterval: 600,
@@ -271,7 +291,7 @@ function bossConfig(world) {
     garbage: { startMs: 120000, firstMs: 6000, minMs: 1200, decay: 0.96 },
     night: null,
     timeStars: [240000, 150000, 90000], // win times in ms for 1 / 2 / 3 stars (3 stars = fastest)
-  };
+  }, difficulty);
 }
 
 function pressureAt(elapsed, cfg) {
@@ -421,7 +441,7 @@ if (typeof module !== "undefined") {
     COLS, ROWS, SHAPES, createState, move, rotate, rotateShape, tick, softDrop,
     hardDrop, ghostY, clearLines, collides, dropInterval, nextType,
     LEVELS_PER_WORLD, BOSS_LEVEL, BOSS_STARS_NEEDED, BOSS_WARN_MS, BLACKOUT_MS, WORLDS,
-    levelConfig, bossConfig, pressureAt, levelInterval, bossDamage, starsFor, bossStarsFor, risingRow, dropBlock,
+    DIFFICULTIES, levelConfig, bossConfig, pressureAt, levelInterval, bossDamage, starsFor, bossStarsFor, risingRow, dropBlock,
     bossAttack, visibleBand, isBlackout, previewType, advance, blankProgress, levelKey, starsAt, starsIn,
     worldUnlocked, unlockedLevel, bossUnlocked, recordResult,
   };
@@ -482,6 +502,7 @@ if (typeof document !== "undefined") {
     best: document.getElementById("best"),
     mode: document.getElementById("mode"),
     levelRow: document.getElementById("level-row"),
+    levelsBtn: document.getElementById("btn-levels"),
     bossbox: document.getElementById("bossbox"),
     bossName: document.getElementById("boss-name"),
     bossHp: document.getElementById("boss-hp"),
@@ -538,10 +559,11 @@ if (typeof document !== "undefined") {
 
   // --- Settings: saved in this browser ---
   const settingsKey = `${GAME_ID}:settings`;
-  const settings = { side: "left" }; // which side of the board the preview bar (next, score, boss) sits on
+  const settings = { side: "left", difficulty: "normal" }; // which side of the board the preview bar (next, score, boss) sits on
   try {
     const saved = JSON.parse(localStorage.getItem(settingsKey));
     if (saved && (saved.side === "left" || saved.side === "right")) settings.side = saved.side;
+    if (saved && DIFFICULTIES[saved.difficulty]) settings.difficulty = saved.difficulty;
   } catch (e) { /* no saved settings */ }
   function applySettings() {
     document.querySelector(".layout").dataset.side = settings.side;
@@ -789,7 +811,7 @@ if (typeof document !== "undefined") {
   function startGame(opts) {
     saveBest();
     endRound();
-    current = opts;
+    current = opts && { world: opts.world, level: opts.level, difficulty: opts.difficulty || settings.difficulty };
     state = createState(Math.random, current);
     finished = false;
     roundStars = 0;
@@ -807,14 +829,26 @@ if (typeof document !== "undefined") {
 
   const restart = () => startGame(current);
 
+  // Opens the level map at the world being played (or the newest open world).
+  function openLevels(newest = false) {
+    if (current && !newest) viewWorld = current.world;
+    else {
+      viewWorld = 0;
+      while (viewWorld + 1 < WORLDS.length && worldUnlocked(progress, viewWorld + 1)) viewWorld++;
+    }
+    openScreen("worlds");
+  }
+
   function updateHud() {
     const b = state.boss;
     els.bossbox.hidden = !b;
     els.levelRow.hidden = !!current;
+    els.levelsBtn.hidden = !current;
     if (b) els.bossName.textContent = state.cfg.bossInfo.name;
     els.mode.textContent = !current ? "Endless"
       : current.level === BOSS_LEVEL ? `${WORLDS[current.world].name} \u00b7 Boss`
         : `${WORLDS[current.world].name} \u00b7 Level ${current.level}`;
+    if (current) els.mode.textContent += ` \u00b7 ${DIFFICULTIES[current.difficulty].name}`;
   }
 
   // --- Screens: menu, level map and result (rendered into one overlay) ---
@@ -857,11 +891,15 @@ if (typeof document !== "undefined") {
       </div>`;
   }
 
+  const difficultyPicker = () => `<p class="row">${Object.keys(DIFFICULTIES).map((k) => `<button data-difficulty="${k}" aria-pressed="${settings.difficulty === k}">${DIFFICULTIES[k].name}</button>`).join("")}</p>`;
+
   function settingsHtml() {
     const side = (value, label) => `<button data-side="${value}" aria-pressed="${settings.side === value}">${label}</button>`;
     return `<h2>Settings</h2>
       <p class="sub">Preview bar (next piece, score)</p>
       <p class="row">${side("left", "Left")}${side("right", "Right")}</p>
+      <p class="sub">Campaign difficulty</p>
+      ${difficultyPicker()}
       <p class="row"><button data-do="menu">Back</button></p>`;
   }
 
@@ -885,6 +923,7 @@ if (typeof document !== "undefined") {
         <button data-world="1" ${w === WORLDS.length - 1 ? "disabled" : ""} aria-label="Next world">&rarr;</button>
       </div>
       <p class="sub">${sub}<br>${stars}/${LEVELS_PER_WORLD * 3} ${STAR}</p>
+      ${difficultyPicker()}
       <div class="levels">${levels.join("")}
         <button class="boss" data-level="${BOSS_LEVEL}" ${bossOpen ? "" : "disabled"}><b>${info.name}</b><span>${bossOpen ? STAR.repeat(bossGot) + NO_STAR.repeat(3 - bossGot) : `\u{1F512} ${BOSS_STARS_NEEDED}${STAR}`}</span></button>
       </div>
@@ -908,13 +947,14 @@ if (typeof document !== "undefined") {
     else if (r.stars < 3) msg = `Next star at ${state.cfg.stars[r.stars]} points.`;
     else msg = "Perfect!";
     const next = r.stars > 0 ? nextTarget(r) : null;
+    const lockedNote = r.stars === 0 && !boss ? `<p class="sub">Earn a star to open the next level.</p>` : "";
     const hint = r.stars > 0 && !boss && r.level === LEVELS_PER_WORLD && !next ? `<p class="sub">The boss opens at ${BOSS_STARS_NEEDED} ${STAR} in this world.</p>` : "";
     return `<h2>${name}</h2>
       <p class="stars">${STAR.repeat(r.stars)}${NO_STAR.repeat(3 - r.stars)}</p>
-      <p class="sub">Score ${r.score}<br>${msg}</p>${hint}
+      <p class="sub">Score ${r.score}<br>${msg}</p>${hint}${lockedNote}
       <div class="col">
-        ${next ? '<button class="main" data-do="next">Next</button>' : ""}
-        <button ${next ? "" : 'class="main"'} data-do="retry">Retry</button>
+        ${next ? `<button class="main" data-do="next">Next level${next.level === BOSS_LEVEL ? " (boss)" : ""}</button>` : ""}
+        <button ${next ? "" : 'class="main"'} data-do="retry">Play this level again</button>
         <button data-do="levels">Levels</button>
       </div>`;
   }
@@ -928,7 +968,7 @@ if (typeof document !== "undefined") {
     const opened = recordResult(progress, current.world, current.level, stars, state.score);
     saveProgress();
     roundStars = stars;
-    lastResult = { world: current.world, level: current.level, stars, score: state.score, won: state.won, opened };
+    lastResult = { difficulty: current.difficulty, world: current.world, level: current.level, stars, score: state.score, won: state.won, opened };
     endRound();
     const shown = state;
     setTimeout(() => { if (state === shown && !screenName) openScreen("result"); }, 800); // let the last frame sink in
@@ -937,21 +977,21 @@ if (typeof document !== "undefined") {
   els.card.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b || b.disabled) return;
-    if (b.dataset.side) { settings.side = b.dataset.side; applySettings(); openScreen("settings"); }
-    else if (b.dataset.level) startGame({ world: viewWorld, level: Number(b.dataset.level) });
+    if (b.dataset.difficulty) { settings.difficulty = b.dataset.difficulty; applySettings(); openScreen(screenName); }
+    else if (b.dataset.side) { settings.side = b.dataset.side; applySettings(); openScreen("settings"); }
+    else if (b.dataset.level) startGame({ world: viewWorld, level: Number(b.dataset.level), difficulty: settings.difficulty });
     else if (b.dataset.world) { viewWorld += Number(b.dataset.world); openScreen("worlds"); }
     else if (b.dataset.do === "resume") { closeScreen(); paused = false; }
     else if (b.dataset.do === "campaign") {
-      viewWorld = 0;
-      while (viewWorld + 1 < WORLDS.length && worldUnlocked(progress, viewWorld + 1)) viewWorld++;
-      openScreen("worlds");
+      openLevels(true); // newest open world, not the one last played
     } else if (b.dataset.do === "endless") startGame(null);
     else if (b.dataset.do === "settings") openScreen("settings");
     else if (b.dataset.do === "help") showHelp();
     else if (b.dataset.do === "menu") openScreen("menu");
     else if (b.dataset.do === "levels") { viewWorld = lastResult.world; openScreen("worlds"); }
-    else if (b.dataset.do === "retry") startGame({ world: lastResult.world, level: lastResult.level });
-    else if (b.dataset.do === "next") startGame(nextTarget(lastResult));
+    else if (b.dataset.do === "overview") openLevels();
+    else if (b.dataset.do === "retry") startGame({ world: lastResult.world, level: lastResult.level, difficulty: lastResult.difficulty });
+    else if (b.dataset.do === "next") startGame({ ...nextTarget(lastResult), difficulty: lastResult.difficulty });
   });
 
   function togglePause() {
@@ -979,7 +1019,7 @@ if (typeof document !== "undefined") {
       return;
     }
     if (key === "Escape") { openScreen("menu"); e.preventDefault(); return; }
-    if (key === "r") restart();
+    if (key === "r") { if (!(current && state.over)) restart(); else if (finished) openScreen("result"); }
     else if (key === "p" && !state.over && !starFreeze) paused = !paused;
     else if (!paused && !state.over) {
       if (key === "ArrowLeft" || key === "a") actions.left();
@@ -1003,7 +1043,11 @@ if (typeof document !== "undefined") {
     if (!collides(state.board, p.shape, p.x, p.y + 1)) actions.down();
   }
   canvas.addEventListener("pointerdown", (e) => {
-    if (state.over) { restart(); return; }
+    if (state.over) {
+      if (current && finished) { if (!screenName) openScreen("result"); } // choose: again or next level
+      else if (!current) restart();
+      return;
+    }
     if (starFreeze) return;
     if (paused) { paused = false; return; }
     if (e.pointerType === "mouse") return;
@@ -1051,6 +1095,7 @@ if (typeof document !== "undefined") {
   document.querySelector("main").addEventListener("contextmenu", (e) => e.preventDefault());
   document.getElementById("btn-pause").addEventListener("click", togglePause);
   document.getElementById("btn-restart").addEventListener("click", restart);
+  els.levelsBtn.addEventListener("click", () => { if (!screenName) openLevels(); });
   document.getElementById("btn-menu").addEventListener("click", () => { if (!screenName) openScreen("menu"); });
   window.addEventListener("pagehide", endRound);
   document.addEventListener("visibilitychange", () => { if (document.hidden && !state.over) { paused = true; } });
