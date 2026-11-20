@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Orb Chain</title>
+  <script>!function(){var r=document.documentElement;if(r.getAttribute("data-theme"))return;var s=null;try{s=localStorage.getItem("kit-theme")}catch(e){}if(!s&&window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)s="dark";r.setAttribute("data-theme",s||"light");r.setAttribute("data-theme-auto","")}()</script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Orb Chain</h1>
+    <p id="mode" class="hint"></p>
+    <canvas id="game" width="600" height="600"></canvas>
+    <p class="stats">Score <strong id="score">0</strong> · Best <strong id="best">0</strong></p>
+    <div class="bar touch-only">
+      <button id="btn-swap" type="button">Swap</button>
+      <button id="btn-pause" type="button">Pause</button>
+      <button id="btn-restart" type="button">Restart</button>
+    </div>
+    <p class="hint kbd-hint">Mouse: aim · click shoot · right-click swap — Keys: ←/→ aim · Space shoot · Q swap · P pause · R restart · Esc menu · ? help</p>
+    <p class="links"><button id="btn-levels" type="button" hidden>Levels</button> <button id="btn-menu" type="button">Menu</button> <button id="btn-help" type="button">How to play</button></p>
+  </main>
+  <div id="screen" hidden role="dialog" aria-modal="true">
+    <div class="card" id="screen-card"></div>
+  </div>
+  <div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="card">
+      <h2 id="help-title"></h2>
+      <div id="help-body"></div>
+      <p id="help-dots" class="dots"></p>
+      <p class="nav">
+        <button id="help-back" type="button">Back</button>
+        <button id="help-next" type="button">Next</button>
+        <button id="help-close" type="button">Skip</button>
+      </p>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

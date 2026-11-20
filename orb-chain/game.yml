@@ -1,0 +1,16 @@
+id: orb-chain
+title: Orb Chain
+description: Shoot coloured orbs into a rolling chain before it reaches the hole. Campaign with Meadow, Frost and Volcano worlds (ten levels and a boss each, rated in stars), three difficulties and an endless mode.
+license: MIT
+version: 0.5.0
+entry: index.html
+controls:
+  - "Mouse: aim, click to shoot, right-click to swap"
+  - "Left/Right (A/D): aim"
+  - "Space (Up/W): shoot"
+  - "Q (Down/S): swap the loaded orbs"
+  - "P: pause"
+  - "R: restart"
+  - "Esc: menu"
+  - "?: how to play"
+  - "Touch: drag to aim, release to shoot, tap the frog or Swap to swap"

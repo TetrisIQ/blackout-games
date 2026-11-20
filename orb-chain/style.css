@@ -1,0 +1,394 @@
+/* Theme: follows the kit portal (it sets data-theme on the page); without it the saved kit choice or the system. */
+:root {
+  color-scheme: light;
+  --bg: #eef2ec; --surface: #e2e8df; --text: #1f241e; --muted: #5d665b; --accent: #3f8f4f;
+  --border: rgba(31, 36, 30, 0.28);
+  --board: #f8faf5; --line: rgba(31, 36, 30, 0.1); --cell-a: #f1f4ec; --cell-b: #e3e9dc;
+  --overlay: rgba(238, 242, 236, 0.86); --cage: #5b6470; --warn: #c8442f;
+  --groove: #cfd8c6; --lane: #e4eadd; --tunnel: #8a9484; --frog: #4fae5d;
+}
+
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --bg: #161a15; --surface: #20261f; --text: #e8ede4; --muted: #99a495; --accent: #6fcf80;
+  --border: rgba(232, 237, 228, 0.28);
+  --board: #0e120d; --line: rgba(232, 237, 228, 0.08); --cell-a: #1a1f19; --cell-b: #141813;
+  --overlay: rgba(22, 26, 21, 0.84); --cage: #cfd8dc; --warn: #ff6b52;
+  --groove: #2b3529; --lane: #1a211a; --tunnel: #46503f; --frog: #4fae5d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #161a15; --surface: #20261f; --text: #e8ede4; --muted: #99a495; --accent: #6fcf80;
+    --border: rgba(232, 237, 228, 0.28);
+    --board: #0e120d; --line: rgba(232, 237, 228, 0.08); --cell-a: #1a1f19; --cell-b: #141813;
+    --overlay: rgba(22, 26, 21, 0.84); --cage: #cfd8dc; --warn: #ff6b52;
+    --groove: #2b3529; --lane: #1a211a; --tunnel: #46503f; --frog: #4fae5d;
+  }
+}
+
+/* Worlds: each one re-tints the page in both themes (the game sets data-world on the root). */
+:root[data-world=frost] {
+  --bg: #eaf0f6; --surface: #dde7f1; --accent: #2f76b8; --board: #f4f8fc; --groove: #c6d6e6; --lane: #dde8f2; --tunnel: #7f93a8; --frog: #4a9bd0;
+  --overlay: rgba(234, 240, 246, 0.86);
+}
+
+:root[data-theme=dark][data-world=frost] {
+  --bg: #0f151c; --surface: #18222d; --accent: #78b8f0; --board: #0a0f15; --groove: #26374a; --lane: #142030; --tunnel: #3c4c5e; --frog: #4a9bd0;
+  --overlay: rgba(15, 21, 28, 0.84);
+}
+
+:root[data-world=volcano] {
+  --bg: #f6ebe5; --surface: #efe0d8; --accent: #c4501b; --board: #fbeee6; --groove: #e6cfc2; --lane: #f2e0d4; --tunnel: #8c7468; --frog: #d9722b;
+  --overlay: rgba(246, 235, 229, 0.86);
+}
+
+:root[data-theme=dark][data-world=volcano] {
+  --bg: #1d1210; --surface: #2a1a15; --accent: #ff7a3a; --board: #160b08; --groove: #43281f; --lane: #24140f; --tunnel: #5a463c; --frog: #d9722b;
+  --overlay: rgba(29, 18, 16, 0.84);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+main {
+  text-align: center;
+  padding: 6px;
+  max-width: 100%;
+}
+
+h1 {
+  margin: 0.2rem 0 0.2rem;
+  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  font-weight: 600;
+}
+
+p {
+  margin: 0.4rem 0;
+}
+
+canvas {
+  display: block;
+  margin: 0 auto;
+  background: var(--board);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  touch-action: none;
+}
+
+#game {
+  width: min(600px, calc(100vw - 16px), calc(100vh - 190px));
+  width: min(600px, calc(100vw - 16px), calc(100dvh - 190px));
+  aspect-ratio: 1;
+  height: auto;
+  cursor: crosshair;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-height: 1.2em;
+}
+
+.stats {
+  color: var(--muted);
+}
+
+.stats strong {
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:active {
+  background: color-mix(in srgb, var(--accent) 28%, var(--surface));
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* On-screen controls only where there is no keyboard. */
+.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse), (max-width: 640px) {
+  .touch-only {
+    display: flex;
+  }
+
+  .kbd-hint {
+    display: none;
+  }
+
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+.bar {
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 0;
+}
+
+/* Menu, level map, result and how to play */
+#help, #screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+#help[hidden], #screen[hidden] {
+  display: none;
+}
+
+#help .card, #screen .card {
+  width: min(440px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+#help h2, #screen h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+#help-body p {
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+#help-body .demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 10px 0;
+  font-size: 1.7rem;
+  background: var(--board);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+#help-body .demo small {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 6px;
+}
+
+#help-body kbd {
+  font: inherit;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--surface);
+}
+
+#help .dots {
+  text-align: center;
+  margin: 8px 0;
+  color: var(--muted);
+  letter-spacing: 0.3em;
+}
+
+#help .dots b {
+  color: var(--accent);
+}
+
+#help .nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+#help .nav #help-next {
+  border-color: var(--accent);
+  flex: 1;
+}
+
+#screen h2 {
+  text-align: center;
+}
+
+#screen .sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 10px;
+}
+
+#screen .col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+#screen .col button.main {
+  border-color: var(--accent);
+  padding: 10px 14px;
+  font-size: 1.05rem;
+}
+
+#screen .worldbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#screen .worldbar h2 {
+  flex: 1;
+  margin: 0;
+}
+
+#screen .levels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin: 12px 0;
+}
+
+#screen .levels button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 2px;
+  line-height: 1.2;
+}
+
+#screen .levels button span {
+  font-size: 0.75rem;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+#screen .levels button.boss {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 10px;
+  border-color: var(--warn);
+}
+
+#screen .stars {
+  text-align: center;
+  font-size: 2.2rem;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  margin: 6px 0;
+}
+
+#screen .row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+#screen .row button {
+  flex: 1;
+}
+
+#screen button[aria-pressed=true] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  font-weight: 600;
+}
+
+/* Phones held sideways: the board fills the height, texts and buttons move to the side. */
+@media (max-height: 520px) and (orientation: landscape) {
+  main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+
+  h1, .kbd-hint {
+    display: none;
+  }
+
+  .links {
+    flex-direction: column;
+    margin: 0;
+  }
+
+  #game {
+    width: calc(100vh - 12px);
+    width: calc(100dvh - 12px);
+  }
+
+  .stats, .bar {
+    flex-direction: column;
+  }
+
+  #btn-help {
+    display: none;
+  }
+}
