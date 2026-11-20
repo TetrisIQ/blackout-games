@@ -4,8 +4,8 @@ description: "Swap neighbouring gems on an 8x8 board to line up three or more, b
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/match3.zip"
-sha256: f2ac3513958b6fa366f07232c85a287c25d53e130e23235960eed89ae95a0c1a
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.5.0/match3.zip"
+sha256: ee055e07da5179551deb5eca8b3bd0048c8aa70fe159af6085d212630f4bf674
 size_bytes: 117898
 license:
   spdx: "MIT"

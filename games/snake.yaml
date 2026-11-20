@@ -4,8 +4,8 @@ description: "Steer a growing snake around a 20x20 board, eat food and avoid wal
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/snake.zip"
-sha256: d2b9463cc7fb312b09d8c756251e2b4fc5497e5719f5597e6575d98fa981e049
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.5.0/snake.zip"
+sha256: f00d23842cd92829bc4dd645cc2e1875a6af5f08572c3e7bca2eee42c22a465d
 size_bytes: 22171
 license:
   spdx: "MIT"

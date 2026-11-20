@@ -4,9 +4,9 @@ description: "Falling-blocks puzzle on a 10x20 board with a campaign (Standard, 
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/tetris.zip"
-sha256: cbb47806e862089cd4e857fb1e768942418fdf3cd2c13c5a6513638985988563
-size_bytes: 60732
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.5.0/tetris.zip"
+sha256: 7c48f3bcb4fc8c1bb5303e16f18d423b3cec73aa43d2f3da3ae2ee658362f6bb
+size_bytes: 63667
 license:
   spdx: "MIT"
 content:

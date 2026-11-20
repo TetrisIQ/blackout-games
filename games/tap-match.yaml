@@ -4,8 +4,8 @@ description: "Tap free tiles from a stacked board into a 7-slot tray; three equa
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/tap-match.zip"
-sha256: 34a42a000cf7e2c86b5e2c98f0f6b07187918cc31dda8c68fba341e0cfe2e7da
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.5.0/tap-match.zip"
+sha256: ac92e56925a674788e2f04e6b9ee1f5363528c51655a79fa88153ff00a40f215
 size_bytes: 59234
 license:
   spdx: "MIT"

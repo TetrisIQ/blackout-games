@@ -4,8 +4,8 @@ description: "Classic Sudoku in four difficulties with pencil notes, undo and hi
 category: games
 type: files
 source:
-  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.4.0/sudoku.zip"
-sha256: 9dfc39eda321d8529f3e5882d77576f16539125f61085683dee8c432077059ac
+  url: "https://github.com/TetrisIQ/blackout-games/releases/download/v0.5.0/sudoku.zip"
+sha256: 0d554e6acff76f3710adc420e9dd48c503297f0c9829099563be5b817a294b29
 size_bytes: 65815
 license:
   spdx: "MIT"
